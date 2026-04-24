@@ -33,7 +33,7 @@ export async function GET() {
 
     // Agentic loop — Claude may do several web searches before answering
     let response = await client.messages.create({
-      model: "claude-sonnet-4-20250514",
+      model: "claude-sonnet-4-6",
       max_tokens: 4096,
       system: SYSTEM,
       tools: [{ type: "web_search_20250305", name: "web_search" } as any],
@@ -56,7 +56,7 @@ export async function GET() {
       messages.push({ role: "user", content: toolResults });
 
       response = await client.messages.create({
-        model: "claude-sonnet-4-20250514",
+        model: "claude-sonnet-4-6",
         max_tokens: 4096,
         system: SYSTEM,
         tools: [{ type: "web_search_20250305", name: "web_search" }] as any,

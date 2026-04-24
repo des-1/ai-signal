@@ -3,25 +3,25 @@ import { NextResponse } from "next/server";
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-const SYSTEM = `You are an AI media intelligence analyst for RepresentAI, a UK organisation focused on AI literacy in the creative industries. Your job is to find and curate the most important AI news stories from the past 7 days that are directly relevant to media, advertising, marketing, and creative professionals.
+const SYSTEM = `You are an AI media intelligence analyst for RepresentAI, a UK organisation focused on AI literacy in the creative industries. Find and curate the most important AI news stories from the past 7 days relevant to media, advertising, marketing, and creative professionals.
 
-Search for recent news across these angles:
-- AI advertising products from Google, Meta, TikTok, Amazon
-- Generative AI tools for creative production (video, image, copy)
-- AI's impact on SEO and search marketing
-- Agency and brand AI adoption stories
-- UK/EU AI regulation affecting media companies
-- AI in social media platforms
+Return a JSON object (not an array) with this exact structure:
+{
+  "tldr": "2-3 sentence overview of the biggest theme or pattern across today's stories",
+  "highlight": "the single most important headline this week in one sentence",
+  "stories": [
+    {"headline":"...","source":"...","tag":"...","summary":"...","url":"..."}
+  ]
+}
 
-Return exactly 5 stories as a valid JSON array. No preamble, no markdown, no backticks. Format:
-[{"headline":"...","source":"...","tag":"...","summary":"...","url":"..."}]
-
-Rules:
+Story rules:
 - headline: max 12 words, sharp and editorial
 - source: the actual publication name
 - tag: one of exactly: Advertising, Content, Search, Social, Generative AI, Tools, Regulation, Strategy
-- summary: 2 sentences — what happened and why it matters for practitioners
-- url: the actual article URL if found, otherwise ""`;
+- summary: 2-3 sentences — what happened and why it matters for practitioners. Include enough context that a non-technical reader understands the significance.
+- url: the actual article URL. This is required — always include it.
+
+Cover a mix of tags. No preamble, no markdown, no backticks. Return only the JSON object.`;
 
 const USER_PROMPT = `Search the web and find the 5 most important and genuinely interesting AI news stories from the past 7 days relevant to media, advertising, marketing, and creative industries. Use multiple searches to find the best stories. Return only the JSON array.`;
 
@@ -70,13 +70,16 @@ export async function GET() {
       .map((b) => b.text)
       .join("");
 
-    const match = rawText.replace(/```[a-z]*/g, "").trim().match(/\[[\s\S]*\]/);
-    if (!match) {
+    const match = rawText.replace(/```[a-z]*/g, "").trim().match(/\{[\s\S]*\}|\[[\s\S]*\]/);
+      if (!match) {
       return NextResponse.json({ error: "Could not parse digest", raw: rawText }, { status: 500 });
     }
 
-    const stories = JSON.parse(match[0]);
-    return NextResponse.json({ stories, generatedAt: new Date().toISOString() });
+    const parsed = JSON.parse(match[0]);
+const stories = Array.isArray(parsed) ? parsed : parsed.stories;
+const tldr = parsed.tldr || "";
+const highlight = parsed.highlight || "";
+return NextResponse.json({ stories, tldr, highlight, generatedAt: new Date().toISOString() });
 
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";

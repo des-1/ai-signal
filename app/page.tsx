@@ -21,12 +21,15 @@ const TAG_ICONS: Record<string, string> = {
   Strategy: "📊",
 };
 
-function buildWhatsApp(stories: Story[]): string {
+function buildWhatsApp(stories: Story[], tldr: string, highlight: string): string {
   const date = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
-  let msg = `*AI Signal — Media & Marketing*\n_${date}_\n\n`;
+  let msg = `*Daily AI News — RepresentAI | Media & Marketing*\n_${date}_\n\n`;
+  if (highlight) msg += `⚡ *This week's highlight:* ${highlight}\n\n`;
+  if (tldr) msg += `*TL;DR* — ${tldr}\n\n---\n\n`;
   stories.forEach((s, i) => {
     const icon = TAG_ICONS[s.tag] || "📌";
     msg += `${icon} *${s.headline}*\n${s.summary}`;
+    if (s.url) msg += `\n${s.url}`;
     if (i < stories.length - 1) msg += "\n\n";
   });
   msg += "\n\n_Digest via RepresentAI / AI Signal_";
@@ -35,6 +38,8 @@ function buildWhatsApp(stories: Story[]): string {
 
 export default function Home() {
   const [stories, setStories] = useState<Story[]>([]);
+  const [tldr, setTldr] = useState("");
+  const [highlight, setHighlight] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
@@ -46,6 +51,8 @@ export default function Home() {
     setLoading(true);
     setError("");
     setStories([]);
+    setTldr("");
+    setHighlight("");
     setCopied(false);
 
     let idx = 0;
@@ -59,6 +66,8 @@ export default function Home() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "API error");
       setStories(data.stories);
+      setTldr(data.tldr || "");
+      setHighlight(data.highlight || "");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong");
     } finally {
@@ -68,7 +77,7 @@ export default function Home() {
   }
 
   function copyToClipboard() {
-    navigator.clipboard.writeText(buildWhatsApp(stories)).then(() => {
+    navigator.clipboard.writeText(buildWhatsApp(stories, tldr, highlight)).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
     });
@@ -128,9 +137,34 @@ export default function Home() {
           </div>
         )}
 
-        {/* Stories */}
+        {/* Digest content */}
         {stories.length > 0 && (
           <>
+            {/* Highlight banner */}
+            {highlight && (
+              <div style={{ padding: "12px 16px", background: "#111", borderRadius: 8, marginBottom: 20 }}>
+                <p style={{ margin: 0, fontSize: 11, fontFamily: "monospace", color: "#888", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                  This week&apos;s highlight
+                </p>
+                <p style={{ margin: 0, fontSize: 14, color: "#fff", fontFamily: "sans-serif", lineHeight: 1.5 }}>
+                  ⚡ {highlight}
+                </p>
+              </div>
+            )}
+
+            {/* TL;DR */}
+            {tldr && (
+              <div style={{ padding: "12px 16px", background: "#f5f5f4", borderRadius: 8, marginBottom: 24, borderLeft: "3px solid #ccc" }}>
+                <p style={{ margin: 0, fontSize: 11, fontFamily: "monospace", color: "#aaa", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                  TL;DR
+                </p>
+                <p style={{ margin: 0, fontSize: 13, color: "#444", fontFamily: "sans-serif", lineHeight: 1.65 }}>
+                  {tldr}
+                </p>
+              </div>
+            )}
+
+            {/* Stories */}
             <div>
               {stories.map((s, i) => (
                 <div key={i} style={{ padding: "1rem 0", borderBottom: i < stories.length - 1 ? "0.5px solid #e5e5e5" : "none" }}>
@@ -144,25 +178,30 @@ export default function Home() {
                   </div>
                   {s.url ? (
                     <a href={s.url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none" }}>
-                      <h2 style={{ margin: "0 0 4px", fontSize: 17, fontWeight: "normal", color: "#111", lineHeight: 1.3, cursor: "pointer" }}>
+                      <h2 style={{ margin: "0 0 6px", fontSize: 17, fontWeight: "normal", color: "#111", lineHeight: 1.3, cursor: "pointer" }}>
                         {s.headline} ↗
                       </h2>
                     </a>
                   ) : (
-                    <h2 style={{ margin: "0 0 4px", fontSize: 17, fontWeight: "normal", color: "#111", lineHeight: 1.3 }}>{s.headline}</h2>
+                    <h2 style={{ margin: "0 0 6px", fontSize: 17, fontWeight: "normal", color: "#111", lineHeight: 1.3 }}>{s.headline}</h2>
                   )}
                   <p style={{ margin: 0, fontSize: 13, color: "#555", lineHeight: 1.65, fontFamily: "sans-serif" }}>{s.summary}</p>
+                  {s.url && (
+                    <p style={{ margin: "6px 0 0", fontSize: 11, fontFamily: "monospace", color: "#aaa", wordBreak: "break-all" }}>
+                      {s.url}
+                    </p>
+                  )}
                 </div>
               ))}
             </div>
 
             {/* WhatsApp preview */}
-            <div style={{ marginTop: 24, padding: "1rem 1.25rem", background: "#f5f5f4", borderRadius: 10, border: "0.5px solid #e5e5e5" }}>
+            <div style={{ marginTop: 28, padding: "1rem 1.25rem", background: "#f5f5f4", borderRadius: 10, border: "0.5px solid #e5e5e5" }}>
               <p style={{ fontFamily: "monospace", fontSize: 10, color: "#aaa", textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 8px" }}>
                 WhatsApp preview
               </p>
-              <pre style={{ margin: 0, fontSize: 11, color: "#666", fontFamily: "monospace", whiteSpace: "pre-wrap", lineHeight: 1.65, maxHeight: 180, overflowY: "auto" }}>
-                {buildWhatsApp(stories)}
+              <pre style={{ margin: 0, fontSize: 11, color: "#666", fontFamily: "monospace", whiteSpace: "pre-wrap", lineHeight: 1.65, maxHeight: 220, overflowY: "auto" }}>
+                {buildWhatsApp(stories, tldr, highlight)}
               </pre>
             </div>
 

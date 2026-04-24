@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "AI Signal — Media & Marketing Digest",
-  description: "Weekly AI news digest for media and marketing professionals",
+  title: "AI Signal — Industry Intelligence",
+  description: "AI news digests for media, law, finance and more — RepresentAI",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

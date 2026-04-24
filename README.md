@@ -1,55 +1,58 @@
-# AI Signal — Media & Marketing Digest
+# AI Signal v2 — Multi-Industry Intelligence
 
-A weekly AI news digest tool for RepresentAI, pulling live stories relevant to media, advertising, and marketing professionals.
+AI news digests across industries for RepresentAI. Powered by Claude with live web search, backed by Supabase.
 
-## Stack
-- Next.js 14 (App Router)
-- Anthropic API with web search
-- Vercel deployment
+## What's new in v2
+- Multi-industry support (Media & Marketing, Law, Finance — add more in Admin)
+- Digest archive — browse previous weeks without regenerating
+- Cross-industry pulse — spots themes across industries (near-zero tokens)
+- Tag frequency chart — see what topics are dominating over time
+- Admin panel — add/remove industries with custom search focus, no code changes needed
+- Shareable links — each industry digest has its own URL
+- Fresh/Stale indicator — know when a digest needs regenerating
 
-## Deploy to Vercel in 3 steps
+## Setup
 
-### 1. Push to GitHub
-```bash
-git init
-git add .
-git commit -m "initial commit"
-gh repo create ai-signal --public --push
-```
+### 1. Supabase
+Create a new project at supabase.com (or use your existing one).
 
-### 2. Deploy to Vercel
-```bash
-npx vercel
-```
-Or connect the GitHub repo at vercel.com/new.
+Run `supabase/schema.sql` in the Supabase SQL editor. This creates the tables and seeds the three default industries.
 
-### 3. Add environment variable in Vercel dashboard
-```
-ANTHROPIC_API_KEY = your_key_here
-```
-Go to: Project → Settings → Environment Variables
+Get your keys from: Project Settings → API:
+- `NEXT_PUBLIC_SUPABASE_URL` = Project URL
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY` = anon/public key
+- `SUPABASE_SERVICE_ROLE_KEY` = service_role key (keep this secret)
 
-That's it. Your digest lives at `https://your-project.vercel.app`.
-
-## Local development
+### 2. Local development
 ```bash
 cp .env.local.example .env.local
-# Add your ANTHROPIC_API_KEY to .env.local
+# Fill in all four keys
 npm install
 npm run dev
 ```
 
-## How it works
-- `/` — the digest UI
-- `/api/digest` — GET endpoint that calls Claude with live web search
+### 3. Deploy to Vercel
+Push to GitHub, connect at vercel.com/new.
 
-Claude runs an agentic search loop: it performs multiple web searches, then synthesises the 5 most relevant AI stories for media & marketing, returned as structured JSON.
+Add all four environment variables in Vercel:
+Project → Settings → Environment Variables
 
-## Optional: Scheduled digest via Vercel Cron
-Add to `vercel.json` (already included if you want it):
-```json
-{
-  "crons": [{ "path": "/api/digest", "schedule": "0 8 * * 1" }]
-}
-```
-This pings the digest every Monday at 8am UTC. You'd need to extend the route to store results (e.g. in Vercel KV or a simple JSON file) rather than return them live. Ask Claude to help with that if needed.
+### 4. Done
+- Homepage: `/`
+- Industry digest: `/digest/media-marketing`, `/digest/law`, `/digest/finance`
+- Admin: `/admin`
+
+## Adding a new industry
+Go to `/admin` → fill in name, icon, and focus areas → Add industry.
+The new tab appears on the homepage immediately. No redeployment needed.
+
+## Architecture
+- `app/page.tsx` — dashboard homepage
+- `app/digest/[slug]/page.tsx` — dynamic industry page
+- `app/admin/page.tsx` — admin panel
+- `app/api/digest/route.ts` — generates digest, saves to Supabase
+- `app/api/pulse/route.ts` — cross-industry pulse (cheap: ~100 tokens)
+- `app/api/industries/route.ts` — list + create industries
+- `app/api/industries/[slug]/route.ts` — update + delete
+- `lib/supabase.ts` — shared types and clients
+- `supabase/schema.sql` — DB setup and seed

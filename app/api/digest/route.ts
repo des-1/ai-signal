@@ -1,14 +1,20 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { supabaseAdmin } from "@/lib/supabase";
 
+const WEB_SEARCH_TOOL = { type: "web_search_20250305", name: "web_search" } as any;
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-const SYSTEM = `You are an AI media intelligence analyst for RepresentAI, a UK organisation focused on AI literacy in the creative industries. Find and curate the most important AI news stories from the past 7 days relevant to media, advertising, marketing, and creative professionals.
+function buildSystemPrompt(industryName: string, focus: string) {
+  return `You are an AI industry intelligence analyst for RepresentAI, a UK organisation focused on AI literacy across professional sectors. Your job is to find and curate the most important AI news stories from the past 7 days directly relevant to the ${industryName} industry.
 
-Return a JSON object (not an array) with this exact structure:
+Search focus areas:
+${focus}
+
+Return a JSON object with this exact structure — no preamble, no markdown, no backticks:
 {
-  "tldr": "2-3 sentence overview of the biggest theme or pattern across today's stories",
-  "highlight": "the single most important headline this week in one sentence",
+  "tldr": "2-3 sentence overview of the biggest theme or pattern across this week's stories",
+  "highlight": "the single most important story this week in one sentence",
   "stories": [
     {"headline":"...","source":"...","tag":"...","summary":"...","url":"..."}
   ]
@@ -17,30 +23,45 @@ Return a JSON object (not an array) with this exact structure:
 Story rules:
 - headline: max 12 words, sharp and editorial
 - source: the actual publication name
-- tag: one of exactly: Advertising, Content, Search, Social, Generative AI, Tools, Regulation, Strategy
+- tag: one of exactly: Advertising, Content, Search, Social, Generative AI, Tools, Regulation, Strategy, Legal, Finance, Risk
 - summary: 2-3 sentences — what happened and why it matters for practitioners. Include enough context that a non-technical reader understands the significance.
-- url: the actual article URL. This is required — always include it.
+- url: the actual article URL — always include it
 
-Cover a mix of tags. No preamble, no markdown, no backticks. Return only the JSON object.`;
+Return exactly 5 stories. Cover a mix of tags.`;
+}
 
-const USER_PROMPT = `Search the web and find the 5 most important and genuinely interesting AI news stories from the past 7 days relevant to media, advertising, marketing, and creative industries. Use multiple searches to find the best stories. Return only the JSON array.`;
+export async function GET(request: NextRequest) {
+  const slug = request.nextUrl.searchParams.get("slug") || "media-marketing";
+  const db = supabaseAdmin();
 
-export async function GET() {
+  // Fetch the industry config
+  const { data: industry, error: industryError } = await db
+    .from("industries")
+    .select("*")
+    .eq("slug", slug)
+    .single();
+
+  if (industryError || !industry) {
+    return NextResponse.json({ error: `Industry '${slug}' not found` }, { status: 404 });
+  }
+
   try {
     const messages: Anthropic.MessageParam[] = [
-      { role: "user", content: USER_PROMPT },
+      {
+        role: "user",
+        content: `Search the web and find the 5 most important and genuinely interesting AI news stories from the past 7 days relevant to the ${industry.name} industry. Use multiple searches to cover different angles. Return only the JSON object.`,
+      },
     ];
 
-    // Agentic loop — Claude may do several web searches before answering
     let response = await client.messages.create({
       model: "claude-sonnet-4-6",
       max_tokens: 4096,
-      system: SYSTEM,
-      tools: [{ type: "web_search_20250305", name: "web_search" } as any],
+      system: buildSystemPrompt(industry.name, industry.focus),
+      tools: [WEB_SEARCH_TOOL],
       messages,
     });
 
-    // Handle tool use loop
+    // Agentic search loop
     while (response.stop_reason === "tool_use") {
       const assistantContent = response.content;
       messages.push({ role: "assistant", content: assistantContent });
@@ -50,7 +71,10 @@ export async function GET() {
         .map((toolUse) => ({
           type: "tool_result" as const,
           tool_use_id: toolUse.id,
-          content: JSON.stringify({ status: "search_executed", query: (toolUse.input as { query: string }).query }),
+          content: JSON.stringify({
+            status: "search_executed",
+            query: (toolUse.input as { query: string }).query,
+          }),
         }));
 
       messages.push({ role: "user", content: toolResults });
@@ -58,29 +82,39 @@ export async function GET() {
       response = await client.messages.create({
         model: "claude-sonnet-4-6",
         max_tokens: 4096,
-        system: SYSTEM,
-        tools: [{ type: "web_search_20250305", name: "web_search" }] as any,
+        system: buildSystemPrompt(industry.name, industry.focus),
+        tools: [WEB_SEARCH_TOOL],
         messages,
       });
     }
 
-    // Extract the JSON from the final text response
     const rawText = response.content
       .filter((b): b is Anthropic.TextBlock => b.type === "text")
       .map((b) => b.text)
       .join("");
 
-    const match = rawText.replace(/```[a-z]*/g, "").trim().match(/\{[\s\S]*\}|\[[\s\S]*\]/);
-      if (!match) {
+    const match = rawText.replace(/```[a-z]*/g, "").trim().match(/\{[\s\S]*\}/);
+    if (!match) {
       return NextResponse.json({ error: "Could not parse digest", raw: rawText }, { status: 500 });
     }
 
     const parsed = JSON.parse(match[0]);
-const stories = Array.isArray(parsed) ? parsed : parsed.stories;
-const tldr = parsed.tldr || "";
-const highlight = parsed.highlight || "";
-return NextResponse.json({ stories, tldr, highlight, generatedAt: new Date().toISOString() });
+    const { stories, tldr, highlight } = parsed;
 
+    // Save to Supabase
+    const { data: saved } = await db
+      .from("digests")
+      .insert({ industry_slug: slug, stories, tldr, highlight })
+      .select()
+      .single();
+
+    return NextResponse.json({
+      id: saved?.id,
+      stories,
+      tldr,
+      highlight,
+      generatedAt: new Date().toISOString(),
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 500 });

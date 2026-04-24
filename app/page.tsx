@@ -1,250 +1,278 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import { Industry, DigestRecord, Pulse } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase";
 
-type Story = {
-  headline: string;
-  source: string;
-  tag: string;
-  summary: string;
-  url?: string;
-};
-
-const TAG_ICONS: Record<string, string> = {
-  Advertising: "📢",
-  Content: "✍️",
-  Search: "🔍",
-  Social: "📱",
-  "Generative AI": "🤖",
-  Tools: "🛠️",
-  Regulation: "⚖️",
-  Strategy: "📊",
-};
-
-function buildWhatsApp(stories: Story[], tldr: string, highlight: string): string {
-  const date = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
-  let msg = `*Daily AI News — RepresentAI | Media & Marketing*\n_${date}_\n\n`;
-  if (highlight) msg += `⚡ *This week's highlight:* ${highlight}\n\n`;
-  if (tldr) msg += `*TL;DR* — ${tldr}\n\n---\n\n`;
-  stories.forEach((s, i) => {
-    const icon = TAG_ICONS[s.tag] || "📌";
-    msg += `${icon} *${s.headline}*\n${s.summary}`;
-    if (s.url) msg += `\n${s.url}`;
-    if (i < stories.length - 1) msg += "\n\n";
-  });
-  msg += "\n\n_Digest via RepresentAI / AI Signal_";
-  return msg;
+function timeAgo(date: string) {
+  const diff = Date.now() - new Date(date).getTime();
+  const mins = Math.floor(diff / 60000);
+  const hours = Math.floor(diff / 3600000);
+  const days = Math.floor(diff / 86400000);
+  if (mins < 60) return `${mins}m ago`;
+  if (hours < 24) return `${hours}h ago`;
+  return `${days}d ago`;
 }
 
+const TAG_COLORS: Record<string, string> = {
+  Advertising: "#e9d5ff",
+  Content: "#d1fae5",
+  Search: "#dbeafe",
+  Social: "#fce7f3",
+  "Generative AI": "#fef3c7",
+  Tools: "#e0f2fe",
+  Regulation: "#fee2e2",
+  Strategy: "#f0fdf4",
+  Legal: "#ede9fe",
+  Finance: "#ecfdf5",
+  Risk: "#fff7ed",
+};
+
 export default function Home() {
-  const [stories, setStories] = useState<Story[]>([]);
-  const [tldr, setTldr] = useState("");
-  const [highlight, setHighlight] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [copied, setCopied] = useState(false);
-  const [loadingPhrase, setLoadingPhrase] = useState("Searching the web...");
+  const [industries, setIndustries] = useState<Industry[]>([]);
+  const [latestDigests, setLatestDigests] = useState<Record<string, DigestRecord>>({});
+  const [pulse, setPulse] = useState<Pulse | null>(null);
+  const [loadingPulse, setLoadingPulse] = useState(false);
+  const [tagCounts, setTagCounts] = useState<{ tag: string; count: number }[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const phrases = ["Searching the web...", "Scanning industry sources...", "Filtering for signal...", "Building your digest..."];
+  useEffect(() => {
+    loadData();
+  }, []);
 
-  async function fetchDigest() {
+  async function loadData() {
     setLoading(true);
-    setError("");
-    setStories([]);
-    setTldr("");
-    setHighlight("");
-    setCopied(false);
+    // Load industries
+    const { data: inds } = await supabase
+      .from("industries")
+      .select("*")
+      .eq("active", true)
+      .order("created_at", { ascending: true });
 
-    let idx = 0;
-    const timer = setInterval(() => {
-      idx = (idx + 1) % phrases.length;
-      setLoadingPhrase(phrases[idx]);
-    }, 2500);
+    if (!inds) { setLoading(false); return; }
+    setIndustries(inds);
 
+    // Load latest digest for each industry + tag counts
+    const digestMap: Record<string, DigestRecord> = {};
+    const allTags: string[] = [];
+
+    for (const ind of inds) {
+      const { data: digest } = await supabase
+        .from("digests")
+        .select("*")
+        .eq("industry_slug", ind.slug)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (digest) {
+        digestMap[ind.slug] = digest;
+        digest.stories?.forEach((s: { tag: string }) => allTags.push(s.tag));
+      }
+    }
+
+    // Also pull tags from last 30 days of all digests for the chart
+    const { data: recentDigests } = await supabase
+      .from("digests")
+      .select("stories")
+      .gte("created_at", new Date(Date.now() - 30 * 86400000).toISOString());
+
+    recentDigests?.forEach((d) =>
+      d.stories?.forEach((s: { tag: string }) => allTags.push(s.tag))
+    );
+
+    const counts: Record<string, number> = {};
+    allTags.forEach((t) => { counts[t] = (counts[t] || 0) + 1; });
+    const sorted = Object.entries(counts)
+      .map(([tag, count]) => ({ tag, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 7);
+
+    setLatestDigests(digestMap);
+    setTagCounts(sorted);
+    setLoading(false);
+
+    // Load latest pulse (no API call, just DB read)
+    const { data: latestPulse } = await supabase
+      .from("pulses")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (latestPulse) setPulse(latestPulse);
+  }
+
+  async function generatePulse() {
+    setLoadingPulse(true);
     try {
-      const res = await fetch("/api/digest");
+      const res = await fetch("/api/pulse");
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "API error");
-      setStories(data.stories);
-      setTldr(data.tldr || "");
-      setHighlight(data.highlight || "");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Something went wrong");
+      if (data.content) setPulse({ id: "", content: data.content, created_at: new Date().toISOString() });
     } finally {
-      clearInterval(timer);
-      setLoading(false);
+      setLoadingPulse(false);
     }
   }
 
-  function copyToClipboard() {
-    navigator.clipboard.writeText(buildWhatsApp(stories, tldr, highlight)).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2500);
-    });
-  }
-
-  const today = new Date().toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+  const today = new Date().toLocaleDateString("en-GB", {
+    weekday: "long", day: "numeric", month: "long", year: "numeric",
+  });
+  const maxTagCount = tagCounts[0]?.count || 1;
 
   return (
-    <main style={{ minHeight: "100vh", background: "#fafaf9", display: "flex", justifyContent: "center", padding: "3rem 1rem" }}>
-      <div style={{ width: "100%", maxWidth: 640, fontFamily: "'Georgia', serif" }}>
+    <main style={{ minHeight: "100vh", background: "#fafaf9", padding: "2.5rem 1rem" }}>
+      <div style={{ maxWidth: 860, margin: "0 auto", fontFamily: "'Georgia', serif" }}>
 
         {/* Masthead */}
-        <div style={{ borderTop: "2px solid #111", paddingTop: 10, marginBottom: 28 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+        <div style={{ borderTop: "2px solid #111", paddingTop: 10, marginBottom: 32 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: 8 }}>
             <div>
-              <h1 style={{ margin: 0, fontSize: 28, fontWeight: "normal", letterSpacing: "-0.02em", color: "#111" }}>AI Signal</h1>
+              <h1 style={{ margin: 0, fontSize: 32, fontWeight: "normal", letterSpacing: "-0.02em", color: "#111" }}>
+                AI Signal
+              </h1>
               <p style={{ margin: "4px 0 0", fontSize: 11, fontFamily: "monospace", color: "#888", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                Media &amp; Marketing Edition — RepresentAI
+                Industry Intelligence — RepresentAI
               </p>
             </div>
-            <p style={{ fontSize: 11, fontFamily: "monospace", color: "#999", margin: 0 }}>{today}</p>
+            <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+              <p style={{ fontSize: 11, fontFamily: "monospace", color: "#999", margin: 0 }}>{today}</p>
+              <Link href="/admin" style={{ fontSize: 11, fontFamily: "monospace", color: "#bbb", textDecoration: "none", padding: "4px 10px", border: "0.5px solid #ddd", borderRadius: 4 }}>
+                Admin
+              </Link>
+            </div>
           </div>
           <div style={{ borderBottom: "0.5px solid #ddd", marginTop: 10 }} />
         </div>
 
-        {/* Fetch button */}
-        {!loading && stories.length === 0 && (
-          <button
-            onClick={fetchDigest}
-            style={{
-              width: "100%", padding: "14px 0", fontSize: 14, fontFamily: "sans-serif",
-              cursor: "pointer", border: "1px solid #ccc", borderRadius: 8,
-              background: "#fff", color: "#111", fontWeight: 500,
-              transition: "background 0.15s",
-            }}
-            onMouseOver={e => (e.currentTarget.style.background = "#f5f5f4")}
-            onMouseOut={e => (e.currentTarget.style.background = "#fff")}
-          >
-            Fetch this week&apos;s digest
-          </button>
-        )}
-
-        {/* Loading */}
-        {loading && (
-          <div style={{ textAlign: "center", padding: "2rem 0" }}>
-            <p style={{ fontFamily: "monospace", fontSize: 12, color: "#888", marginBottom: 12 }}>{loadingPhrase}</p>
-            <div style={{ height: 2, background: "#eee", borderRadius: 2, overflow: "hidden" }}>
-              <div style={{ height: "100%", background: "#111", borderRadius: 2, animation: "progress 3s ease-in-out infinite alternate" }} />
-            </div>
-          </div>
-        )}
-
-        {/* Error */}
-        {error && (
-          <div style={{ padding: 12, borderRadius: 8, border: "1px solid #fca5a5", background: "#fef2f2", color: "#991b1b", fontSize: 13, fontFamily: "sans-serif", marginTop: 12 }}>
-            {error}
-          </div>
-        )}
-
-        {/* Digest content */}
-        {stories.length > 0 && (
+        {loading ? (
+          <p style={{ fontFamily: "monospace", fontSize: 12, color: "#aaa" }}>Loading...</p>
+        ) : (
           <>
-            {/* Highlight banner */}
-            {highlight && (
-              <div style={{ padding: "12px 16px", background: "#111", borderRadius: 8, marginBottom: 20 }}>
-                <p style={{ margin: 0, fontSize: 11, fontFamily: "monospace", color: "#888", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                  This week&apos;s highlight
-                </p>
-                <p style={{ margin: 0, fontSize: 14, color: "#fff", fontFamily: "sans-serif", lineHeight: 1.5 }}>
-                  ⚡ {highlight}
-                </p>
-              </div>
-            )}
-
-            {/* TL;DR */}
-            {tldr && (
-              <div style={{ padding: "12px 16px", background: "#f5f5f4", borderRadius: 8, marginBottom: 24, borderLeft: "3px solid #ccc" }}>
-                <p style={{ margin: 0, fontSize: 11, fontFamily: "monospace", color: "#aaa", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                  TL;DR
-                </p>
-                <p style={{ margin: 0, fontSize: 13, color: "#444", fontFamily: "sans-serif", lineHeight: 1.65 }}>
-                  {tldr}
-                </p>
-              </div>
-            )}
-
-            {/* Stories */}
-            <div>
-              {stories.map((s, i) => (
-                <div key={i} style={{ padding: "1rem 0", borderBottom: i < stories.length - 1 ? "0.5px solid #e5e5e5" : "none" }}>
-                  <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 4 }}>
-                    <span style={{ fontFamily: "monospace", fontSize: 10, color: "#aaa", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                      {s.source}
-                    </span>
-                    <span style={{ fontFamily: "monospace", fontSize: 10, background: "#f5f5f4", color: "#666", padding: "2px 7px", borderRadius: 3 }}>
-                      {s.tag}
-                    </span>
-                  </div>
-                  {s.url ? (
-                    <a href={s.url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none" }}>
-                      <h2 style={{ margin: "0 0 6px", fontSize: 17, fontWeight: "normal", color: "#111", lineHeight: 1.3, cursor: "pointer" }}>
-                        {s.headline} ↗
-                      </h2>
-                    </a>
+            {/* Cross-industry pulse */}
+            <div style={{ marginBottom: 32, padding: "16px 20px", background: "#111", borderRadius: 10 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+                <div style={{ flex: 1 }}>
+                  <p style={{ margin: "0 0 6px", fontSize: 10, fontFamily: "monospace", color: "#666", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                    Cross-industry pulse
+                  </p>
+                  {pulse ? (
+                    <>
+                      <p style={{ margin: 0, fontSize: 14, color: "#fff", lineHeight: 1.6, fontFamily: "sans-serif" }}>
+                        ⚡ {pulse.content}
+                      </p>
+                      <p style={{ margin: "6px 0 0", fontSize: 10, fontFamily: "monospace", color: "#555" }}>
+                        {timeAgo(pulse.created_at)}
+                      </p>
+                    </>
                   ) : (
-                    <h2 style={{ margin: "0 0 6px", fontSize: 17, fontWeight: "normal", color: "#111", lineHeight: 1.3 }}>{s.headline}</h2>
-                  )}
-                  <p style={{ margin: 0, fontSize: 13, color: "#555", lineHeight: 1.65, fontFamily: "sans-serif" }}>{s.summary}</p>
-                  {s.url && (
-                    <p style={{ margin: "6px 0 0", fontSize: 11, fontFamily: "monospace", color: "#aaa", wordBreak: "break-all" }}>
-                      {s.url}
+                    <p style={{ margin: 0, fontSize: 13, color: "#555", fontFamily: "sans-serif" }}>
+                      Generate digests across industries to see cross-industry themes.
                     </p>
                   )}
                 </div>
-              ))}
+                <button
+                  onClick={generatePulse}
+                  disabled={loadingPulse}
+                  style={{
+                    padding: "8px 14px", fontSize: 11, fontFamily: "monospace", cursor: "pointer",
+                    border: "0.5px solid #333", borderRadius: 6, background: "transparent",
+                    color: "#888", whiteSpace: "nowrap", opacity: loadingPulse ? 0.5 : 1,
+                  }}
+                >
+                  {loadingPulse ? "..." : "Refresh pulse"}
+                </button>
+              </div>
             </div>
 
-            {/* WhatsApp preview */}
-            <div style={{ marginTop: 28, padding: "1rem 1.25rem", background: "#f5f5f4", borderRadius: 10, border: "0.5px solid #e5e5e5" }}>
-              <p style={{ fontFamily: "monospace", fontSize: 10, color: "#aaa", textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 8px" }}>
-                WhatsApp preview
-              </p>
-              <pre style={{ margin: 0, fontSize: 11, color: "#666", fontFamily: "monospace", whiteSpace: "pre-wrap", lineHeight: 1.65, maxHeight: 220, overflowY: "auto" }}>
-                {buildWhatsApp(stories, tldr, highlight)}
-              </pre>
+            {/* Industry cards */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 16, marginBottom: 40 }}>
+              {industries.map((ind) => {
+                const digest = latestDigests[ind.slug];
+                return (
+                  <Link key={ind.slug} href={`/digest/${ind.slug}`} style={{ textDecoration: "none" }}>
+                    <div
+                      style={{
+                        padding: "20px", background: "#fff", borderRadius: 10,
+                        border: "0.5px solid #e5e5e5", cursor: "pointer",
+                        transition: "box-shadow 0.15s, border-color 0.15s",
+                      }}
+                      onMouseOver={e => {
+                        (e.currentTarget as HTMLDivElement).style.boxShadow = "0 4px 20px rgba(0,0,0,0.08)";
+                        (e.currentTarget as HTMLDivElement).style.borderColor = "#ccc";
+                      }}
+                      onMouseOut={e => {
+                        (e.currentTarget as HTMLDivElement).style.boxShadow = "none";
+                        (e.currentTarget as HTMLDivElement).style.borderColor = "#e5e5e5";
+                      }}
+                    >
+                      <div style={{ fontSize: 28, marginBottom: 10 }}>{ind.icon}</div>
+                      <h2 style={{ margin: "0 0 4px", fontSize: 17, fontWeight: "normal", color: "#111", lineHeight: 1.2 }}>
+                        {ind.name}
+                      </h2>
+                      {digest ? (
+                        <>
+                          <p style={{ margin: "0 0 10px", fontSize: 10, fontFamily: "monospace", color: "#aaa" }}>
+                            Updated {timeAgo(digest.created_at)}
+                          </p>
+                          <p style={{ margin: "0 0 12px", fontSize: 12, color: "#777", fontFamily: "sans-serif", lineHeight: 1.5 }}>
+                            {digest.highlight}
+                          </p>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                            {[...new Set(digest.stories?.map((s: { tag: string }) => s.tag))].slice(0, 3).map((tag) => (
+                              <span
+                                key={tag as string}
+                                style={{
+                                  fontSize: 10, fontFamily: "monospace", padding: "2px 7px", borderRadius: 3,
+                                  background: TAG_COLORS[tag as string] || "#f5f5f4", color: "#555",
+                                }}
+                              >
+                                {tag as string}
+                              </span>
+                            ))}
+                          </div>
+                        </>
+                      ) : (
+                        <p style={{ margin: 0, fontSize: 12, color: "#bbb", fontFamily: "sans-serif" }}>
+                          No digest yet — click to generate
+                        </p>
+                      )}
+                    </div>
+                  </Link>
+                );
+              })}
             </div>
 
-            {/* Actions */}
-            <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
-              <button
-                onClick={copyToClipboard}
-                style={{
-                  flex: 1, padding: "12px 0", fontSize: 13, fontFamily: "sans-serif",
-                  cursor: "pointer", border: copied ? "1px solid #86efac" : "1px solid #ccc",
-                  borderRadius: 8, background: "#fff",
-                  color: copied ? "#15803d" : "#111", fontWeight: 500, transition: "all 0.15s",
-                }}
-              >
-                {copied ? "Copied to clipboard ✓" : "Copy for WhatsApp"}
-              </button>
-              <button
-                onClick={fetchDigest}
-                style={{
-                  padding: "12px 16px", fontSize: 13, fontFamily: "sans-serif",
-                  cursor: "pointer", border: "1px solid #ccc", borderRadius: 8,
-                  background: "transparent", color: "#666",
-                }}
-                onMouseOver={e => (e.currentTarget.style.background = "#f5f5f4")}
-                onMouseOut={e => (e.currentTarget.style.background = "transparent")}
-              >
-                Refresh
-              </button>
-            </div>
-
-            <p style={{ fontFamily: "monospace", fontSize: 10, color: "#bbb", marginTop: 20, paddingTop: 16, borderTop: "0.5px solid #e5e5e5" }}>
-              Stories sourced via live web search. Verify before sharing.
-            </p>
+            {/* Tag frequency chart */}
+            {tagCounts.length > 0 && (
+              <div style={{ padding: "20px 24px", background: "#fff", borderRadius: 10, border: "0.5px solid #e5e5e5" }}>
+                <p style={{ margin: "0 0 16px", fontSize: 10, fontFamily: "monospace", color: "#aaa", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                  Topic frequency — last 30 days
+                </p>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {tagCounts.map(({ tag, count }) => (
+                    <div key={tag} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <span style={{ fontSize: 11, fontFamily: "monospace", color: "#888", width: 110, flexShrink: 0 }}>{tag}</span>
+                      <div style={{ flex: 1, height: 6, background: "#f5f5f4", borderRadius: 3, overflow: "hidden" }}>
+                        <div
+                          style={{
+                            height: "100%", borderRadius: 3,
+                            width: `${(count / maxTagCount) * 100}%`,
+                            background: TAG_COLORS[tag] ? TAG_COLORS[tag].replace(")", ", 0.8)").replace("rgb", "rgba") : "#d1d5db",
+                            backgroundColor: "#111",
+                            transition: "width 0.4s ease",
+                          }}
+                        />
+                      </div>
+                      <span style={{ fontSize: 10, fontFamily: "monospace", color: "#bbb", width: 20, textAlign: "right" }}>{count}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </>
         )}
       </div>
-
-      <style>{`
-        @keyframes progress {
-          from { width: 10%; margin-left: 0; }
-          to { width: 60%; margin-left: 40%; }
-        }
-      `}</style>
     </main>
   );
 }

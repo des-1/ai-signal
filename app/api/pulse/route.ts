@@ -26,7 +26,7 @@ export async function GET() {
       .eq("industry_slug", industry.slug)
       .order("created_at", { ascending: false })
       .limit(1)
-      .single();
+      .maybeSingle();
 
     if (digest) {
       summaries.push(`${industry.name}: ${digest.highlight || digest.tldr}`);

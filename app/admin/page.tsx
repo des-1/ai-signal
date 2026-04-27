@@ -77,6 +77,7 @@ export default function AdminPage() {
   const [newIcon, setNewIcon] = useState("globe");
   const [newFocus, setNewFocus] = useState("");
   const [addSaving, setAddSaving] = useState(false);
+  const [generating, setGenerating] = useState<string | null>(null);
 
   useEffect(() => { loadIndustries(); }, []);
 
@@ -166,6 +167,20 @@ export default function AdminPage() {
     setSuccess(msg);
     setTimeout(() => setSuccess(""), 3000);
   }
+
+  async function generateDigest(slug: string) {
+  setGenerating(slug);
+  try {
+    const res = await fetch(`/api/digest?slug=${slug}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed");
+    flash(`Digest generated for ${slug}.`);
+  } catch (e) {
+    setError(e instanceof Error ? e.message : "Something went wrong");
+  } finally {
+    setGenerating(null);
+  }
+}
 
   const input: React.CSSProperties = {
     width: "100%", padding: "9px 12px", fontSize: 13, fontFamily: "sans-serif",
@@ -281,6 +296,10 @@ export default function AdminPage() {
                         <button onClick={() => deleteIndustry(ind.slug, ind.name)} disabled={deleting === ind.slug}
                           style={{ fontSize: 11, fontFamily: "monospace", cursor: "pointer", padding: "5px 10px", border: "0.5px solid #fca5a5", borderRadius: 5, background: "transparent", color: "#ef4444", opacity: deleting === ind.slug ? 0.5 : 1 }}>
                           Delete
+                        </button>
+                        <button onClick={() => generateDigest(ind.slug)} disabled={generating === ind.slug}
+                          style={{ fontSize: 11, fontFamily: "monospace", cursor: "pointer", padding: "5px 10px", border: "0.5px solid #e5e5e5", borderRadius: 5, background: "transparent", color: "#22c55e", opacity: generating === ind.slug ? 0.5 : 1 }}>
+                          {generating === ind.slug ? "..." : "Generate"}
                         </button>
                       </div>
                     </div>

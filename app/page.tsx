@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Industry, DigestRecord, Pulse } from "@/lib/supabase";
+import { Industry, DigestRecord } from "@/lib/supabase";
 import { supabase } from "@/lib/supabase";
 import {
   Megaphone, Scale, TrendingUp, HeartPulse, Zap, Sprout, Cpu, Factory,
@@ -19,7 +19,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   "building-2": Building2, "landmark": Landmark, "flask": FlaskConical, "plane": Plane,
 };
 
-function IndustryIcon({ iconId, size = 22 }: { iconId: string; size?: number }) {
+function IndustryIcon({ iconId, size = 20 }: { iconId: string; size?: number }) {
   const Icon = ICON_MAP[iconId] || Globe;
   return <Icon size={size} strokeWidth={1.5} color="currentColor" />;
 }
@@ -29,40 +29,50 @@ function timeAgo(date: string) {
   const mins = Math.floor(diff / 60000);
   const hours = Math.floor(diff / 3600000);
   const days = Math.floor(diff / 86400000);
+  if (mins < 2) return "just now";
   if (mins < 60) return `${mins}m ago`;
   if (hours < 24) return `${hours}h ago`;
+  if (days === 1) return "yesterday";
   return `${days}d ago`;
 }
 
-const TAG_COLORS: Record<string, string> = {
-  Advertising: "#e9d5ff",
-  Content: "#d1fae5",
-  Search: "#dbeafe",
-  Social: "#fce7f3",
-  "Generative AI": "#fef3c7",
-  Tools: "#e0f2fe",
-  Regulation: "#fee2e2",
-  Strategy: "#f0fdf4",
-  Legal: "#ede9fe",
-  Finance: "#ecfdf5",
-  Risk: "#fff7ed",
+function freshnessStatus(date: string | null): "today" | "week" | "stale" | "never" {
+  if (!date) return "never";
+  const diff = Date.now() - new Date(date).getTime();
+  if (diff < 24 * 60 * 60 * 1000) return "today";
+  if (diff < 7 * 24 * 60 * 60 * 1000) return "week";
+  return "stale";
+}
+
+const STATUS_COLORS = {
+  today: "#4ade80",
+  week: "#fbbf24",
+  stale: "#d1d5db",
+  never: "#e5e7eb",
+};
+
+const STATUS_LABELS = {
+  today: "Updated today",
+  week: "Updated this week",
+  stale: "Not updated recently",
+  never: "Never generated",
+};
+
+type IndustryWithStats = Industry & {
+  latestDigest: DigestRecord | null;
+  digestCount: number;
 };
 
 export default function Home() {
-  const [industries, setIndustries] = useState<Industry[]>([]);
-  const [latestDigests, setLatestDigests] = useState<Record<string, DigestRecord>>({});
-  const [pulse, setPulse] = useState<Pulse | null>(null);
-  const [loadingPulse, setLoadingPulse] = useState(false);
-  const [tagCounts, setTagCounts] = useState<{ tag: string; count: number }[]>([]);
+  const [industries, setIndustries] = useState<IndustryWithStats[]>([]);
   const [loading, setLoading] = useState(true);
+  const [updatedToday, setUpdatedToday] = useState(0);
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  useEffect(() => { loadData(); }, []);
 
   async function loadData() {
     setLoading(true);
-    // Load industries
+
     const { data: inds } = await supabase
       .from("industries")
       .select("*")
@@ -70,14 +80,12 @@ export default function Home() {
       .order("created_at", { ascending: true });
 
     if (!inds) { setLoading(false); return; }
-    setIndustries(inds);
 
-    // Load latest digest for each industry + tag counts
-    const digestMap: Record<string, DigestRecord> = {};
-    const allTags: string[] = [];
+    const enriched: IndustryWithStats[] = [];
+    let todayCount = 0;
 
     for (const ind of inds) {
-      const { data: digest } = await supabase
+      const { data: latest } = await supabase
         .from("digests")
         .select("*")
         .eq("industry_slug", ind.slug)
@@ -85,59 +93,38 @@ export default function Home() {
         .limit(1)
         .maybeSingle();
 
-      if (digest) {
-        digestMap[ind.slug] = digest;
-        digest.stories?.forEach((s: { tag: string }) => allTags.push(s.tag));
-      }
+      const { count } = await supabase
+        .from("digests")
+        .select("*", { count: "exact", head: true })
+        .eq("industry_slug", ind.slug);
+
+      if (latest && freshnessStatus(latest.created_at) === "today") todayCount++;
+
+      enriched.push({
+        ...ind,
+        latestDigest: latest || null,
+        digestCount: count || 0,
+      });
     }
 
-    // Also pull tags from last 30 days of all digests for the chart
-    const { data: recentDigests } = await supabase
-      .from("digests")
-      .select("stories")
-      .gte("created_at", new Date(Date.now() - 30 * 86400000).toISOString());
+    // Sort by digest count descending for activity insight
+    const sorted = [...enriched].sort((a, b) => b.digestCount - a.digestCount);
 
-    recentDigests?.forEach((d) =>
-      d.stories?.forEach((s: { tag: string }) => allTags.push(s.tag))
-    );
-
-    const counts: Record<string, number> = {};
-    allTags.forEach((t) => { counts[t] = (counts[t] || 0) + 1; });
-    const sorted = Object.entries(counts)
-      .map(([tag, count]) => ({ tag, count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 7);
-
-    setLatestDigests(digestMap);
-    setTagCounts(sorted);
+    setIndustries(enriched);
+    setUpdatedToday(todayCount);
     setLoading(false);
 
-    // Load latest pulse (no API call, just DB read)
-    const { data: latestPulse } = await supabase
-      .from("pulses")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (latestPulse) setPulse(latestPulse);
+    // Store sorted separately for chart
+    setSortedByActivity(sorted);
   }
 
-  async function generatePulse() {
-    setLoadingPulse(true);
-    try {
-      const res = await fetch("/api/pulse");
-      const data = await res.json();
-      if (data.content) setPulse({ id: "", content: data.content, created_at: new Date().toISOString() });
-    } finally {
-      setLoadingPulse(false);
-    }
-  }
+  const [sortedByActivity, setSortedByActivity] = useState<IndustryWithStats[]>([]);
 
   const today = new Date().toLocaleDateString("en-GB", {
     weekday: "long", day: "numeric", month: "long", year: "numeric",
   });
-  const maxTagCount = tagCounts[0]?.count || 1;
+
+  const maxCount = sortedByActivity[0]?.digestCount || 1;
 
   return (
     <main style={{ minHeight: "100vh", background: "#fafaf9", padding: "2.5rem 1rem" }}>
@@ -154,9 +141,7 @@ export default function Home() {
                 Industry Intelligence — RepresentAI
               </p>
             </div>
-            <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-              <p style={{ fontSize: 11, fontFamily: "monospace", color: "#999", margin: 0 }}>{today}</p>
-            </div>
+            <p style={{ fontSize: 11, fontFamily: "monospace", color: "#999", margin: 0 }}>{today}</p>
           </div>
           <div style={{ borderBottom: "0.5px solid #ddd", marginTop: 10 }} />
         </div>
@@ -165,131 +150,131 @@ export default function Home() {
           <p style={{ fontFamily: "monospace", fontSize: 12, color: "#aaa" }}>Loading...</p>
         ) : (
           <>
-            {/* Cross-industry pulse */}
-            <div style={{ marginBottom: 32, padding: "16px 20px", background: "#111", borderRadius: 10 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
-                <div style={{ flex: 1 }}>
-                  <p style={{ margin: "0 0 6px", fontSize: 10, fontFamily: "monospace", color: "#666", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                    Cross-industry pulse
-                  </p>
-                  {pulse ? (
-                    <>
-                      <p style={{ margin: 0, fontSize: 14, color: "#fff", lineHeight: 1.6, fontFamily: "sans-serif" }}>
-                        ⚡ {pulse.content}
-                      </p>
-                      <p style={{ margin: "6px 0 0", fontSize: 10, fontFamily: "monospace", color: "#555" }}>
-                        {timeAgo(pulse.created_at)}
-                      </p>
-                    </>
-                  ) : (
-                    <p style={{ margin: 0, fontSize: 13, color: "#555", fontFamily: "sans-serif" }}>
-                      Generate digests across industries to see cross-industry themes.
-                    </p>
-                  )}
-                </div>
-                <button
-                  onClick={generatePulse}
-                  disabled={loadingPulse}
-                  style={{
-                    padding: "8px 14px", fontSize: 11, fontFamily: "monospace", cursor: "pointer",
-                    border: "0.5px solid #333", borderRadius: 6, background: "transparent",
-                    color: "#888", whiteSpace: "nowrap", opacity: loadingPulse ? 0.5 : 1,
-                  }}
-                >
-                  {loadingPulse ? "..." : "Refresh pulse"}
-                </button>
+            {/* Summary bar */}
+            <div style={{ display: "flex", gap: 24, marginBottom: 28, flexWrap: "wrap" }}>
+              <div>
+                <p style={{ margin: 0, fontSize: 11, fontFamily: "monospace", color: "#aaa", textTransform: "uppercase", letterSpacing: "0.08em" }}>Industries</p>
+                <p style={{ margin: "4px 0 0", fontSize: 24, fontWeight: "normal", color: "#111" }}>{industries.length}</p>
+              </div>
+              <div>
+                <p style={{ margin: 0, fontSize: 11, fontFamily: "monospace", color: "#aaa", textTransform: "uppercase", letterSpacing: "0.08em" }}>Updated today</p>
+                <p style={{ margin: "4px 0 0", fontSize: 24, fontWeight: "normal", color: updatedToday > 0 ? "#111" : "#ccc" }}>
+                  {updatedToday} <span style={{ fontSize: 13, color: "#aaa" }}>of {industries.length}</span>
+                </p>
+              </div>
+              <div>
+                <p style={{ margin: 0, fontSize: 11, fontFamily: "monospace", color: "#aaa", textTransform: "uppercase", letterSpacing: "0.08em" }}>Total digests</p>
+                <p style={{ margin: "4px 0 0", fontSize: 24, fontWeight: "normal", color: "#111" }}>
+                  {industries.reduce((acc, i) => acc + i.digestCount, 0)}
+                </p>
               </div>
             </div>
 
-            {/* Industry cards */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 16, marginBottom: 40 }}>
+            {/* Industry list */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 1, marginBottom: 40 }}>
               {industries.map((ind) => {
-                const digest = latestDigests[ind.slug];
+                const status = freshnessStatus(ind.latestDigest?.created_at || null);
                 return (
                   <Link key={ind.slug} href={`/digest/${ind.slug}`} style={{ textDecoration: "none" }}>
                     <div
                       style={{
-                        padding: "20px", background: "#fff", borderRadius: 10,
-                        border: "0.5px solid #e5e5e5", cursor: "pointer",
-                        transition: "box-shadow 0.15s, border-color 0.15s",
+                        display: "flex", alignItems: "center", gap: 16,
+                        padding: "14px 16px", background: "#fff",
+                        border: "0.5px solid #e5e5e5", borderRadius: 8,
+                        transition: "background 0.1s, border-color 0.1s",
+                        cursor: "pointer",
                       }}
                       onMouseOver={e => {
-                        (e.currentTarget as HTMLDivElement).style.boxShadow = "0 4px 20px rgba(0,0,0,0.08)";
-                        (e.currentTarget as HTMLDivElement).style.borderColor = "#ccc";
+                        (e.currentTarget as HTMLDivElement).style.background = "#f9f9f8";
+                        (e.currentTarget as HTMLDivElement).style.borderColor = "#d5d5d5";
                       }}
                       onMouseOut={e => {
-                        (e.currentTarget as HTMLDivElement).style.boxShadow = "none";
+                        (e.currentTarget as HTMLDivElement).style.background = "#fff";
                         (e.currentTarget as HTMLDivElement).style.borderColor = "#e5e5e5";
                       }}
                     >
-                      <div style={{ width: 40, height: 40, borderRadius: 10, background: "#f5f5f4", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 12 }}>
-                        <IndustryIcon iconId={ind.icon} size={20} />
+                      {/* Status dot */}
+                      <div title={STATUS_LABELS[status]} style={{
+                        width: 8, height: 8, borderRadius: "50%", flexShrink: 0,
+                        background: STATUS_COLORS[status],
+                      }} />
+
+                      {/* Icon */}
+                      <div style={{
+                        width: 36, height: 36, borderRadius: 8, background: "#f5f5f4",
+                        display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                        color: "#555",
+                      }}>
+                        <IndustryIcon iconId={ind.icon} size={18} />
                       </div>
-                      <h2 style={{ margin: "0 0 4px", fontSize: 17, fontWeight: "normal", color: "#111", lineHeight: 1.2 }}>
-                        {ind.name}
-                      </h2>
-                      {digest ? (
-                        <>
-                          <p style={{ margin: "0 0 10px", fontSize: 10, fontFamily: "monospace", color: "#aaa" }}>
-                            Updated {timeAgo(digest.created_at)}
-                          </p>
-                          <p style={{ margin: "0 0 12px", fontSize: 12, color: "#777", fontFamily: "sans-serif", lineHeight: 1.5 }}>
-                            {digest.highlight}
-                          </p>
-                          <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                            {[...new Set(digest.stories?.map((s: { tag: string }) => s.tag))].slice(0, 3).map((tag) => (
-                              <span
-                                key={tag as string}
-                                style={{
-                                  fontSize: 10, fontFamily: "monospace", padding: "2px 7px", borderRadius: 3,
-                                  background: TAG_COLORS[tag as string] || "#f5f5f4", color: "#555",
-                                }}
-                              >
-                                {tag as string}
-                              </span>
-                            ))}
-                          </div>
-                        </>
-                      ) : (
-                        <p style={{ margin: 0, fontSize: 12, color: "#bbb", fontFamily: "sans-serif" }}>
-                          No digest yet — click to generate
+
+                      {/* Name */}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ margin: 0, fontSize: 15, color: "#111", fontFamily: "'Georgia', serif" }}>{ind.name}</p>
+                        <p style={{ margin: "2px 0 0", fontSize: 11, fontFamily: "monospace", color: "#bbb" }}>
+                          {ind.latestDigest ? timeAgo(ind.latestDigest.created_at) : "No digest yet"}
                         </p>
-                      )}
+                      </div>
+
+                      {/* Digest count */}
+                      <div style={{ textAlign: "right", flexShrink: 0 }}>
+                        <p style={{ margin: 0, fontSize: 13, color: "#aaa", fontFamily: "monospace" }}>
+                          {ind.digestCount > 0 ? `${ind.digestCount} ${ind.digestCount === 1 ? "digest" : "digests"}` : "—"}
+                        </p>
+                      </div>
+
+                      {/* Arrow */}
+                      <span style={{ color: "#ccc", fontSize: 14, flexShrink: 0 }}>→</span>
                     </div>
                   </Link>
                 );
               })}
             </div>
 
-            {/* Tag frequency chart */}
-            {tagCounts.length > 0 && (
-              <div style={{ padding: "20px 24px", background: "#fff", borderRadius: 10, border: "0.5px solid #e5e5e5" }}>
+            {/* Activity chart */}
+            {sortedByActivity.some(i => i.digestCount > 0) && (
+              <div style={{ padding: "20px 24px", background: "#fff", borderRadius: 10, border: "0.5px solid #e5e5e5", marginBottom: 32 }}>
                 <p style={{ margin: "0 0 16px", fontSize: 10, fontFamily: "monospace", color: "#aaa", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                  Topic frequency — last 30 days
+                  Most active industries
                 </p>
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  {tagCounts.map(({ tag, count }) => (
-                    <div key={tag} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <span style={{ fontSize: 11, fontFamily: "monospace", color: "#888", width: 110, flexShrink: 0 }}>{tag}</span>
-                      <div style={{ flex: 1, height: 6, background: "#f5f5f4", borderRadius: 3, overflow: "hidden" }}>
-                        <div
-                          style={{
-                            height: "100%", borderRadius: 3,
-                            width: `${(count / maxTagCount) * 100}%`,
-                            background: TAG_COLORS[tag] ? TAG_COLORS[tag].replace(")", ", 0.8)").replace("rgb", "rgba") : "#d1d5db",
-                            backgroundColor: "#111",
-                            transition: "width 0.4s ease",
-                          }}
-                        />
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {sortedByActivity.filter(i => i.digestCount > 0).map((ind) => (
+                    <div key={ind.slug} style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, width: 180, flexShrink: 0 }}>
+                        <div style={{ color: "#aaa" }}><IndustryIcon iconId={ind.icon} size={14} /></div>
+                        <span style={{ fontSize: 12, fontFamily: "monospace", color: "#888", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {ind.name}
+                        </span>
                       </div>
-                      <span style={{ fontSize: 10, fontFamily: "monospace", color: "#bbb", width: 20, textAlign: "right" }}>{count}</span>
+                      <div style={{ flex: 1, height: 6, background: "#f5f5f4", borderRadius: 3, overflow: "hidden" }}>
+                        <div style={{
+                          height: "100%", borderRadius: 3,
+                          width: `${(ind.digestCount / maxCount) * 100}%`,
+                          background: "#111",
+                          transition: "width 0.4s ease",
+                        }} />
+                      </div>
+                      <span style={{ fontSize: 11, fontFamily: "monospace", color: "#bbb", width: 24, textAlign: "right", flexShrink: 0 }}>
+                        {ind.digestCount}
+                      </span>
                     </div>
                   ))}
                 </div>
               </div>
             )}
+
+            {/* Status legend */}
+            <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
+              {(Object.entries(STATUS_LABELS) as [keyof typeof STATUS_LABELS, string][]).map(([key, label]) => (
+                <div key={key} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <div style={{ width: 7, height: 7, borderRadius: "50%", background: STATUS_COLORS[key] }} />
+                  <span style={{ fontSize: 10, fontFamily: "monospace", color: "#bbb" }}>{label}</span>
+                </div>
+              ))}
+            </div>
           </>
         )}
+
       </div>
     </main>
   );

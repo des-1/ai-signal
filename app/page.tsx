@@ -156,9 +156,6 @@ export default function Home() {
             </div>
             <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
               <p style={{ fontSize: 11, fontFamily: "monospace", color: "#999", margin: 0 }}>{today}</p>
-              <Link href="/admin" style={{ fontSize: 11, fontFamily: "monospace", color: "#bbb", textDecoration: "none", padding: "4px 10px", border: "0.5px solid #ddd", borderRadius: 4 }}>
-                Admin
-              </Link>
             </div>
           </div>
           <div style={{ borderBottom: "0.5px solid #ddd", marginTop: 10 }} />

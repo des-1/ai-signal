@@ -3,6 +3,25 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { supabase, DigestRecord, Story, TAG_ICONS } from "@/lib/supabase";
+import {
+  Megaphone, Scale, TrendingUp, HeartPulse, Zap, Sprout, Cpu, Factory,
+  HardHat, Truck, GraduationCap, Shield, Wrench, Music, ShoppingBag,
+  Globe, Building2, Landmark, FlaskConical, Plane, LucideIcon
+} from "lucide-react";
+
+const ICON_MAP: Record<string, LucideIcon> = {
+  "megaphone": Megaphone, "scale": Scale, "trending-up": TrendingUp,
+  "heart-pulse": HeartPulse, "zap": Zap, "sprout": Sprout, "cpu": Cpu,
+  "factory": Factory, "hard-hat": HardHat, "truck": Truck,
+  "graduation-cap": GraduationCap, "shield": Shield, "wrench": Wrench,
+  "music": Music, "shopping-bag": ShoppingBag, "globe": Globe,
+  "building-2": Building2, "landmark": Landmark, "flask": FlaskConical, "plane": Plane,
+};
+
+function IndustryIcon({ iconId, size = 20 }: { iconId: string; size?: number }) {
+  const Icon = ICON_MAP[iconId] || Globe;
+  return <Icon size={size} strokeWidth={1.5} color="currentColor" />;
+}
 
 function timeAgo(date: string) {
   const diff = Date.now() - new Date(date).getTime();
@@ -158,7 +177,7 @@ export default function DigestPage({ params }: { params: { slug: string } }) {
                 </Link>
               </div>
               <h1 style={{ margin: "4px 0 0", fontSize: 26, fontWeight: "normal", letterSpacing: "-0.02em", color: "#111" }}>
-                {industryIcon} {industryName}
+                <IndustryIcon iconId={industryIcon} size={22} /> {industryName}
               </h1>
               <p style={{ margin: "4px 0 0", fontSize: 11, fontFamily: "monospace", color: "#888", textTransform: "uppercase", letterSpacing: "0.08em" }}>
                 AI Intelligence — RepresentAI

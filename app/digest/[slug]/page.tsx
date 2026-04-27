@@ -321,18 +321,6 @@ export default function DigestPage({ params }: { params: { slug: string } }) {
               >
                 🔗 Share
               </button>
-              {isFresh && (
-                <button
-                  onClick={fetchDigest}
-                  style={{
-                    padding: "12px 16px", fontSize: 13, fontFamily: "sans-serif",
-                    cursor: "pointer", border: "1px solid #ccc", borderRadius: 8,
-                    background: "transparent", color: "#666",
-                  }}
-                >
-                  Refresh
-                </button>
-              )}
             </div>
 
             {/* Archive */}

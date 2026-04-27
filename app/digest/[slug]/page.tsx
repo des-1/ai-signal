@@ -30,7 +30,7 @@ function buildWhatsApp(digest: DigestRecord, industryName: string): string {
   return msg;
 }
 
-const FRESH_THRESHOLD_MS = 6 * 60 * 60 * 1000; // 6 hours
+const FRESH_THRESHOLD_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 export default function DigestPage({ params }: { params: { slug: string } }) {
   const { slug } = params;

@@ -19,11 +19,11 @@ function buildWhatsApp(digest: DigestRecord, industryName: string): string {
   const date = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
   let msg = `*Daily AI News — RepresentAI | ${industryName}*\n_${date}_\n\n`;
   if (digest.highlight) msg += `⚡ *This week's highlight:* ${digest.highlight}\n\n`;
-  if (digest.tldr) msg += `*TL;DR* — ${digest.tldr}\n\n---\n\n`;
+  if (digest.tldr) msg += `${digest.tldr}\n\n`;
   digest.stories?.forEach((s: Story, i: number) => {
     const icon = TAG_ICONS[s.tag] || "📌";
     msg += `${icon} *${s.headline}*\n${s.summary}`;
-    if (s.url) msg += `\n${s.url}`;
+    if (s.url) msg += `\n\n${s.url}`;
     if (i < digest.stories.length - 1) msg += "\n\n";
   });
   msg += "\n\n_Digest via RepresentAI / AI Signal_";

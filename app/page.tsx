@@ -4,6 +4,25 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Industry, DigestRecord, Pulse } from "@/lib/supabase";
 import { supabase } from "@/lib/supabase";
+import {
+  Megaphone, Scale, TrendingUp, HeartPulse, Zap, Sprout, Cpu, Factory,
+  HardHat, Truck, GraduationCap, Shield, Wrench, Music, ShoppingBag,
+  Globe, Building2, Landmark, FlaskConical, Plane, LucideIcon
+} from "lucide-react";
+
+const ICON_MAP: Record<string, LucideIcon> = {
+  "megaphone": Megaphone, "scale": Scale, "trending-up": TrendingUp,
+  "heart-pulse": HeartPulse, "zap": Zap, "sprout": Sprout, "cpu": Cpu,
+  "factory": Factory, "hard-hat": HardHat, "truck": Truck,
+  "graduation-cap": GraduationCap, "shield": Shield, "wrench": Wrench,
+  "music": Music, "shopping-bag": ShoppingBag, "globe": Globe,
+  "building-2": Building2, "landmark": Landmark, "flask": FlaskConical, "plane": Plane,
+};
+
+function IndustryIcon({ iconId, size = 22 }: { iconId: string; size?: number }) {
+  const Icon = ICON_MAP[iconId] || Globe;
+  return <Icon size={size} strokeWidth={1.5} color="currentColor" />;
+}
 
 function timeAgo(date: string) {
   const diff = Date.now() - new Date(date).getTime();
@@ -135,9 +154,12 @@ export default function Home() {
                 Industry Intelligence — RepresentAI
               </p>
             </div>
-            <p style={{ margin: 0, fontSize: 12, color: "#555", fontFamily: "sans-serif" }}>
-              {today}
-            </p>
+            <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+              <p style={{ fontSize: 11, fontFamily: "monospace", color: "#999", margin: 0 }}>{today}</p>
+              <Link href="/admin" style={{ fontSize: 11, fontFamily: "monospace", color: "#bbb", textDecoration: "none", padding: "4px 10px", border: "0.5px solid #ddd", borderRadius: 4 }}>
+                Admin
+              </Link>
+            </div>
           </div>
           <div style={{ borderBottom: "0.5px solid #ddd", marginTop: 10 }} />
         </div>
@@ -203,7 +225,9 @@ export default function Home() {
                         (e.currentTarget as HTMLDivElement).style.borderColor = "#e5e5e5";
                       }}
                     >
-                      <div style={{ fontSize: 28, marginBottom: 10 }}>{ind.icon}</div>
+                      <div style={{ width: 40, height: 40, borderRadius: 10, background: "#f5f5f4", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 12 }}>
+                        <IndustryIcon iconId={ind.icon} size={20} />
+                      </div>
                       <h2 style={{ margin: "0 0 4px", fontSize: 17, fontWeight: "normal", color: "#111", lineHeight: 1.2 }}>
                         {ind.name}
                       </h2>

@@ -213,13 +213,13 @@ export default function AdminPage() {
                         <label style={lbl}>Industry name</label>
                         <input style={input} value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} />
                       </div>
+                      <div style={{ marginBottom: 16 }}>
+                        <label style={lbl}>Search focus areas</label>
+                        <textarea style={{ ...input, minHeight: 140, resize: "vertical" }} value={editForm.focus} onChange={e => setEditForm(f => ({ ...f, focus: e.target.value }))} />
+                      </div>
                       <div style={{ marginBottom: 14 }}>
                         <label style={lbl}>Icon</label>
                         <IconPicker value={editForm.icon} onChange={icon => setEditForm(f => ({ ...f, icon }))} />
-                      </div>
-                      <div style={{ marginBottom: 16 }}>
-                        <label style={lbl}>Search focus areas</label>
-                        <textarea style={{ ...input, minHeight: 90, resize: "vertical" }} value={editForm.focus} onChange={e => setEditForm(f => ({ ...f, focus: e.target.value }))} />
                       </div>
                       <div style={{ display: "flex", gap: 8 }}>
                         <button onClick={() => saveEdit(ind.slug)} disabled={saving}
@@ -290,6 +290,18 @@ export default function AdminPage() {
             <input style={input} placeholder="e.g. Music & Entertainment" value={newName} onChange={e => setNewName(e.target.value)} />
           </div>
 
+          <div style={{ marginBottom: 18 }}>
+            <label style={lbl}>Search focus areas</label>
+            <textarea
+              style={{ ...input, minHeight: 140, resize: "vertical" }}
+              placeholder={"Describe what the AI should search for. e.g.\nAI tools for music production\nAI and music copyright\nStreaming platform AI recommendations..."}
+              value={newFocus} onChange={e => setNewFocus(e.target.value)}
+            />
+            <p style={{ margin: "5px 0 0", fontSize: 11, fontFamily: "monospace", color: "#ccc" }}>
+              These focus areas shape what the AI searches for.
+            </p>
+          </div>
+
           <div style={{ marginBottom: 14 }}>
             <label style={lbl}>Icon</label>
             <IconPicker value={newIcon} onChange={setNewIcon} />
@@ -308,18 +320,6 @@ export default function AdminPage() {
               </div>
             </div>
           )}
-
-          <div style={{ marginBottom: 18 }}>
-            <label style={lbl}>Search focus areas</label>
-            <textarea
-              style={{ ...input, minHeight: 90, resize: "vertical" }}
-              placeholder={"Describe what the AI should search for. e.g.\nAI tools for music production\nAI and music copyright\nStreaming platform AI recommendations..."}
-              value={newFocus} onChange={e => setNewFocus(e.target.value)}
-            />
-            <p style={{ margin: "5px 0 0", fontSize: 11, fontFamily: "monospace", color: "#ccc" }}>
-              These focus areas shape what the AI searches for.
-            </p>
-          </div>
 
           <button onClick={addIndustry} disabled={addSaving}
             style={{ width: "100%", padding: "13px 0", fontSize: 15, fontFamily: "sans-serif", cursor: addSaving ? "not-allowed" : "pointer", border: "1px solid #111", borderRadius: 8, background: "#111", color: "#fff", fontWeight: 500, opacity: addSaving ? 0.6 : 1 }}>

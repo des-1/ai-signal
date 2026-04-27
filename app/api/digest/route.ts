@@ -27,6 +27,14 @@ Story rules:
 - summary: 2-3 sentences — what happened and why it matters for practitioners. Include enough context that a non-technical reader understands the significance.
 - url: the actual article URL — always include it
 
+Source rules — critical:
+- Prioritise freely accessible sources: TechCrunch, Reuters, BBC, Forbes, The Guardian, Bloomberg (free articles), Wired, The Verge, Ars Technica, Fast Company, MIT Technology Review, VentureBeat, Business Insider, AP News, Financial Times (free), Gov.uk, official company blogs and press releases
+- Also use reputable industry-specific publications where freely accessible
+- Actively avoid paywalled sources: Wall Street Journal, New York Times, The Economist, and any source requiring a subscription or login to read the full article
+- If a story is only covered by paywalled sources, find a freely accessible source covering the same story instead
+- Never use low-quality sources: PR Newswire, Business Wire, GlobeNewswire, or pure press release wires unless no editorial coverage exists
+- Prefer original reporting over aggregators
+
 Return exactly 5 stories. Cover a mix of tags.`;
 }
 

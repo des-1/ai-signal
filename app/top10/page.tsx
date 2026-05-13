@@ -70,6 +70,7 @@ export default function Top10Page() {
     if (data) {
       setStories(data.stories);
       setGeneratedAt(data.created_at);
+      setSelected(new Set(data.stories.map((s: Top10Story) => s.url || s.headline)));
     }
     setPageLoading(false);
   }, []);

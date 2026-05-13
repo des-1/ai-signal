@@ -348,6 +348,10 @@ export default function AdminPage() {
                       </div>
                     </div>
                     <div className="ind-actions" style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                      <Link href="/top10"
+                        style={{ ...btn(), color: "#aaa", textDecoration: "none", display: "inline-block" }}>
+                        View ↗
+                      </Link>
                       <button onClick={() => { setTop10PromptDraft(top10Prompt); setEditingTop10(true); }} style={btn()}>
                         Edit
                       </button>

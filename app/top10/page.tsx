@@ -45,7 +45,18 @@ export default function Top10Page() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
   const [pageLoading, setPageLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
+  const [loadingPhrase, setLoadingPhrase] = useState("Searching for today's top AI stories...");
+  const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
+
+  const phrases = [
+    "Searching for today's top AI stories...",
+    "Scanning business and industry news...",
+    "Filtering for signal over noise...",
+    "Ranking by business relevance...",
+    "Building your Top 10...",
+  ];
 
   const loadLatest = useCallback(async () => {
     setPageLoading(true);
@@ -64,6 +75,28 @@ export default function Top10Page() {
   }, []);
 
   useEffect(() => { loadLatest(); }, [loadLatest]);
+
+  async function generate() {
+    setGenerating(true);
+    setError("");
+    let idx = 0;
+    const timer = setInterval(() => {
+      idx = (idx + 1) % phrases.length;
+      setLoadingPhrase(phrases[idx]);
+    }, 2500);
+
+    try {
+      const res = await fetch("/api/top10");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to generate");
+      await loadLatest();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Something went wrong");
+    } finally {
+      clearInterval(timer);
+      setGenerating(false);
+    }
+  }
 
   function toggleStory(key: string) {
     setSelected(prev => {
@@ -132,12 +165,37 @@ export default function Top10Page() {
           <div style={{ borderBottom: "0.5px solid #ddd", marginTop: 10 }} />
         </div>
 
-        {/* Empty state */}
-        {stories.length === 0 && (
-          <p style={{ fontFamily: "monospace", fontSize: 12, color: "#aaa", textAlign: "center", padding: "2rem 0" }}>
-            No Top 10 generated yet.{" "}
-            <Link href="/admin" style={{ color: "#aaa" }}>Go to Admin to generate.</Link>
-          </p>
+        {/* Generate button (no stories yet, or stale) */}
+        {!generating && (!stories.length || !isFresh) && (
+          <button
+            onClick={generate}
+            style={{
+              width: "100%", padding: "14px 0", fontSize: 14, fontFamily: "sans-serif",
+              cursor: "pointer", border: "1px solid #ccc", borderRadius: 8,
+              background: "#fff", color: "#111", fontWeight: 500, marginBottom: stories.length ? 20 : 0,
+            }}
+            onMouseOver={e => (e.currentTarget.style.background = "#f5f5f4")}
+            onMouseOut={e => (e.currentTarget.style.background = "#fff")}
+          >
+            {stories.length ? "Generate fresh Top 10" : "Generate today's Top 10"}
+          </button>
+        )}
+
+        {/* Loading spinner */}
+        {generating && (
+          <div style={{ textAlign: "center", padding: "2rem 0" }}>
+            <p style={{ fontFamily: "monospace", fontSize: 12, color: "#888", marginBottom: 12 }}>{loadingPhrase}</p>
+            <div style={{ height: 2, background: "#eee", borderRadius: 2, overflow: "hidden" }}>
+              <div style={{ height: "100%", background: "#111", borderRadius: 2, animation: "progress 3s ease-in-out infinite alternate" }} />
+            </div>
+          </div>
+        )}
+
+        {/* Error */}
+        {error && (
+          <div style={{ padding: 12, borderRadius: 8, border: "1px solid #fca5a5", background: "#fef2f2", color: "#991b1b", fontSize: 13, fontFamily: "sans-serif", marginTop: 12 }}>
+            {error}
+          </div>
         )}
 
         {/* Stories */}
@@ -247,6 +305,13 @@ export default function Top10Page() {
         )}
 
       </div>
+
+      <style>{`
+        @keyframes progress {
+          from { width: 5%; margin-left: 0; }
+          to { width: 70%; margin-left: 30%; }
+        }
+      `}</style>
     </main>
   );
 }

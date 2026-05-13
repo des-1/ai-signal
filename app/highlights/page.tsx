@@ -68,6 +68,7 @@ export default function HighlightsPage() {
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [dbFresh, setDbFresh] = useState(false);
   const [loadingPhrase, setLoadingPhrase] = useState("Searching across all industries...");
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
@@ -94,6 +95,7 @@ export default function HighlightsPage() {
     if (data) {
       setStories(data.stories);
       setGeneratedAt(data.created_at);
+      setDbFresh(Date.now() - new Date(data.created_at).getTime() < FRESH_MS);
     }
     setLoading(false);
   }
@@ -187,7 +189,7 @@ export default function HighlightsPage() {
         </div>
 
         {/* Generate button */}
-        {!generating && (!stories.length || !isFresh) && (
+        {!generating && (!stories.length || !dbFresh) && (
           <button
             onClick={generate}
             style={{

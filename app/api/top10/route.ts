@@ -91,16 +91,25 @@ export async function GET() {
 
     const match = rawText.replace(/```[a-z]*/g, "").trim().match(/\[[\s\S]*\]/);
     if (!match) {
+      console.error("[top10] Could not parse JSON array from response. Raw text:", rawText.slice(0, 500));
       return NextResponse.json({ error: "Could not parse stories", raw: rawText }, { status: 500 });
     }
 
     const stories = JSON.parse(match[0]);
+    console.log("[top10] Parsed", stories.length, "stories:", stories.map((s: any) => s.headline));
 
-    const { data: saved } = await db
+    const { data: saved, error: insertError } = await db
       .from("top10")
       .insert({ stories })
       .select()
       .single();
+
+    if (insertError) {
+      console.error("[top10] Supabase insert error:", insertError);
+      return NextResponse.json({ error: `DB insert failed: ${insertError.message}` }, { status: 500 });
+    }
+
+    console.log("[top10] Saved to DB with id:", saved?.id);
 
     return NextResponse.json({
       id: saved?.id,

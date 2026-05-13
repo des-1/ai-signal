@@ -88,8 +88,12 @@ export default function Top10Page() {
     try {
       const res = await fetch("/api/top10");
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to generate");
+      if (!res.ok) throw new Error(data.error || `API error (${res.status})`);
       await loadLatest();
+      // If loadLatest found nothing despite a 200 response, surface it
+      if (!data.storyCount || data.storyCount === 0) {
+        setError("API returned success but no stories were found. Check Vercel logs.");
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong");
     } finally {

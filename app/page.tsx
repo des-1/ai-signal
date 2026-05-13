@@ -7,7 +7,7 @@ import { supabase } from "@/lib/supabase";
 import {
   Megaphone, Scale, TrendingUp, HeartPulse, Zap, Sprout, Cpu, Factory,
   HardHat, Truck, GraduationCap, Shield, Wrench, Music, ShoppingBag,
-  Globe, Building2, Landmark, FlaskConical, Plane, LucideIcon
+  Globe, Building2, Landmark, FlaskConical, Plane, Sparkles, LucideIcon
 } from "lucide-react";
 
 const ICON_MAP: Record<string, LucideIcon> = {
@@ -67,17 +67,22 @@ export default function Home() {
   const [industries, setIndustries] = useState<IndustryWithStats[]>([]);
   const [loading, setLoading] = useState(true);
   const [updatedToday, setUpdatedToday] = useState(0);
+  const [highlightsData, setHighlightsData] = useState<{ createdAt: string | null; storyCount: number } | null>(null);
 
   useEffect(() => { loadData(); }, []);
 
   async function loadData() {
     setLoading(true);
 
-    const { data: inds } = await supabase
-      .from("industries")
-      .select("*")
-      .eq("active", true)
-      .order("created_at", { ascending: true });
+    const [{ data: inds }, { data: latestHL }] = await Promise.all([
+      supabase.from("industries").select("*").eq("active", true).order("created_at", { ascending: true }),
+      supabase.from("highlights").select("created_at, stories").order("created_at", { ascending: false }).limit(1).maybeSingle(),
+    ]);
+
+    setHighlightsData(latestHL
+      ? { createdAt: latestHL.created_at, storyCount: Array.isArray(latestHL.stories) ? latestHL.stories.length : 0 }
+      : { createdAt: null, storyCount: 0 }
+    );
 
     if (!inds) { setLoading(false); return; }
 
@@ -177,6 +182,55 @@ export default function Home() {
 
             {/* Industry list */}
             <div style={{ display: "flex", flexDirection: "column", gap: 1, marginBottom: 40 }}>
+              {/* Highlights row */}
+              {(() => {
+                const hlStatus = freshnessStatus(highlightsData?.createdAt || null);
+                return (
+                  <Link href="/highlights" style={{ textDecoration: "none" }}>
+                    <div
+                      style={{
+                        display: "flex", alignItems: "center", gap: 16,
+                        padding: "14px 16px", background: "#f0f0ef",
+                        border: "0.5px solid #e5e5e5", borderRadius: 8,
+                        transition: "background 0.1s, border-color 0.1s", cursor: "pointer",
+                      }}
+                      onMouseOver={e => {
+                        (e.currentTarget as HTMLDivElement).style.background = "#eaeae8";
+                        (e.currentTarget as HTMLDivElement).style.borderColor = "#d5d5d5";
+                      }}
+                      onMouseOut={e => {
+                        (e.currentTarget as HTMLDivElement).style.background = "#f0f0ef";
+                        (e.currentTarget as HTMLDivElement).style.borderColor = "#e5e5e5";
+                      }}
+                    >
+                      <div title={STATUS_LABELS[hlStatus]} style={{
+                        width: 8, height: 8, borderRadius: "50%", flexShrink: 0,
+                        background: STATUS_COLORS[hlStatus],
+                      }} />
+                      <div style={{
+                        width: 36, height: 36, borderRadius: 8, background: "#ebebea",
+                        display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                        color: "#555",
+                      }}>
+                        <Sparkles size={18} strokeWidth={1.5} color="currentColor" />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ margin: 0, fontSize: 15, color: "#111", fontFamily: "'Georgia', serif" }}>Industry Highlights</p>
+                        <p style={{ margin: "2px 0 0", fontSize: 11, fontFamily: "monospace", color: "#bbb" }}>
+                          {highlightsData?.createdAt ? timeAgo(highlightsData.createdAt) : "No highlights yet"}
+                        </p>
+                      </div>
+                      <div style={{ textAlign: "right", flexShrink: 0 }}>
+                        <p style={{ margin: 0, fontSize: 13, color: "#aaa", fontFamily: "monospace" }}>
+                          {highlightsData && highlightsData.storyCount > 0 ? `${highlightsData.storyCount} stories` : "—"}
+                        </p>
+                      </div>
+                      <span style={{ color: "#ccc", fontSize: 14, flexShrink: 0 }}>→</span>
+                    </div>
+                  </Link>
+                );
+              })()}
+
               {industries.map((ind) => {
                 const status = freshnessStatus(ind.latestDigest?.created_at || null);
                 return (

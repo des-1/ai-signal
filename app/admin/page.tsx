@@ -2,12 +2,24 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Industry } from "@/lib/supabase";
+import { Industry, supabase } from "@/lib/supabase";
 import {
   Megaphone, Scale, TrendingUp, HeartPulse, Zap, Sprout, Cpu, Factory,
   HardHat, Truck, GraduationCap, Shield, Wrench, Music, ShoppingBag,
-  Globe, Building2, Landmark, FlaskConical, Plane, LucideIcon
+  Globe, Building2, Landmark, FlaskConical, Plane, Sparkles, LucideIcon
 } from "lucide-react";
+
+function timeAgo(date: string) {
+  const diff = Date.now() - new Date(date).getTime();
+  const mins = Math.floor(diff / 60000);
+  const hours = Math.floor(diff / 3600000);
+  const days = Math.floor(diff / 86400000);
+  if (mins < 2) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  if (hours < 24) return `${hours}h ago`;
+  if (days === 1) return "yesterday";
+  return `${days}d ago`;
+}
 
 const ICON_OPTIONS: { id: string; label: string; Icon: LucideIcon }[] = [
   { id: "megaphone",      label: "Media",         Icon: Megaphone },
@@ -70,7 +82,8 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [generating, setGenerating] = useState<string | null>(null);
-  const [generatingAll, setGeneratingAll] = useState(false);
+  const [generatingHighlights, setGeneratingHighlights] = useState(false);
+  const [highlightsData, setHighlightsData] = useState<{ createdAt: string | null; storyCount: number } | null>(null);
   const [editingSlug, setEditingSlug] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ name: "", icon: "globe", focus: "" });
   const [saving, setSaving] = useState(false);
@@ -81,7 +94,20 @@ export default function AdminPage() {
   const [newFocus, setNewFocus] = useState("");
   const [addSaving, setAddSaving] = useState(false);
 
-  useEffect(() => { loadIndustries(); }, []);
+  useEffect(() => { loadIndustries(); loadHighlights(); }, []);
+
+  async function loadHighlights() {
+    const { data } = await supabase
+      .from("highlights")
+      .select("created_at, stories")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    setHighlightsData(data
+      ? { createdAt: data.created_at, storyCount: Array.isArray(data.stories) ? data.stories.length : 0 }
+      : { createdAt: null, storyCount: 0 }
+    );
+  }
 
   async function loadIndustries() {
     setLoading(true);
@@ -141,17 +167,17 @@ export default function AdminPage() {
     } finally { setGenerating(null); }
   }
 
-  async function generateAll() {
-    if (!confirm("Generate highlights for all active industries? This takes 60-90 seconds and updates all industry digests.")) return;
-    setGeneratingAll(true);
+  async function generateHighlights() {
+    setGeneratingHighlights(true);
     try {
       const res = await fetch("/api/highlights");
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed");
       flash(`Done: ${data.storyCount} stories across ${data.industryCount} industries.`);
+      await loadHighlights();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong");
-    } finally { setGeneratingAll(false); }
+    } finally { setGeneratingHighlights(false); }
   }
 
   async function addIndustry() {
@@ -210,22 +236,6 @@ export default function AdminPage() {
         {error && <div style={{ padding: "10px 14px", borderRadius: 8, border: "1px solid #fca5a5", background: "#fef2f2", color: "#991b1b", fontSize: 13, fontFamily: "sans-serif", marginBottom: 16 }}>{error}</div>}
         {success && <div style={{ padding: "10px 14px", borderRadius: 8, border: "1px solid #86efac", background: "#f0fdf4", color: "#15803d", fontSize: 13, fontFamily: "sans-serif", marginBottom: 16 }}>{success}</div>}
 
-        {/* Quick actions */}
-        <div style={{ display: "flex", gap: 10, marginBottom: 28, flexWrap: "wrap" }}>
-          <Link href="/highlights"
-            style={{ flex: 1, minWidth: 140, padding: "12px 0", fontSize: 13, fontFamily: "sans-serif",
-              border: "0.5px solid #e5e5e5", borderRadius: 8, background: "#fff", color: "#111",
-              textDecoration: "none", textAlign: "center" as const, display: "block" }}>
-            View Highlights ↗
-          </Link>
-          <button onClick={generateAll} disabled={generatingAll}
-            style={{ flex: 1, minWidth: 140, padding: "12px 0", fontSize: 13, fontFamily: "sans-serif",
-              cursor: generatingAll ? "not-allowed" : "pointer", border: "1px solid #111",
-              borderRadius: 8, background: "#111", color: "#fff", fontWeight: 500, opacity: generatingAll ? 0.6 : 1 }}>
-            {generatingAll ? "Generating... (~90s)" : "Generate All Highlights"}
-          </button>
-        </div>
-
         {/* Industries */}
         <div style={{ marginBottom: 40 }}>
           <p style={{ fontSize: 10, fontFamily: "monospace", color: "#aaa", textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 14px" }}>
@@ -234,6 +244,31 @@ export default function AdminPage() {
 
           {loading ? <p style={{ fontFamily: "monospace", fontSize: 12, color: "#ccc" }}>Loading...</p> : (
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {/* Highlights row */}
+              <div style={{ background: "#f0f0ef", border: "0.5px solid #e5e5e5", borderRadius: 10, overflow: "hidden" }}>
+                <div className="ind-card-inner" style={{ padding: "14px 16px", display: "flex", alignItems: "flex-start", gap: 12 }}>
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: 12, flex: 1, minWidth: 0 }}>
+                    <div style={{ width: 38, height: 38, borderRadius: 9, background: "#ebebea", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      <Sparkles size={19} strokeWidth={1.5} color="#555" />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ margin: "0 0 2px", fontSize: 14, color: "#111" }}>Industry Highlights</p>
+                      <p style={{ margin: 0, fontSize: 12, color: "#aaa", fontFamily: "sans-serif", lineHeight: 1.5 }}>
+                        {highlightsData?.createdAt
+                          ? `Last generated ${timeAgo(highlightsData.createdAt)} · ${highlightsData.storyCount} stories`
+                          : "Never generated"}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="ind-actions" style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                    <button onClick={generateHighlights} disabled={generatingHighlights}
+                      style={btn({ color: "#16a34a", borderColor: "#bbf7d0", opacity: generatingHighlights ? 0.5 : 1 })}>
+                      {generatingHighlights ? "Working..." : "Generate"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
               {industries.map((ind) => (
                 <div key={ind.id} style={{ background: "#fff", border: "0.5px solid #e5e5e5", borderRadius: 10, overflow: "hidden", opacity: ind.active ? 1 : 0.6 }}>
 

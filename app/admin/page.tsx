@@ -1,12 +1,30 @@
 "use client";
 
+/*
+ * SQL — run once in Supabase SQL editor to create the two new tables:
+ *
+ * -- Stores generated Top 10 Daily News results (same shape as highlights)
+ * create table top10 (
+ *   id         uuid        primary key default gen_random_uuid(),
+ *   stories    jsonb       not null default '[]',
+ *   created_at timestamptz not null default now()
+ * );
+ *
+ * -- Single-row config that holds the search prompt for Top 10
+ * create table top10_config (
+ *   id         int         primary key default 1,
+ *   prompt     text        not null,
+ *   updated_at timestamptz not null default now()
+ * );
+ */
+
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Industry, supabase } from "@/lib/supabase";
 import {
   Megaphone, Scale, TrendingUp, HeartPulse, Zap, Sprout, Cpu, Factory,
   HardHat, Truck, GraduationCap, Shield, Wrench, Music, ShoppingBag,
-  Globe, Building2, Landmark, FlaskConical, Plane, Sparkles, LucideIcon
+  Globe, Building2, Landmark, FlaskConical, Plane, Sparkles, Newspaper, LucideIcon
 } from "lucide-react";
 
 function timeAgo(date: string) {
@@ -70,6 +88,8 @@ function IconPicker({ value, onChange }: { value: string; onChange: (id: string)
   );
 }
 
+const DEFAULT_TOP10_PROMPT = "Find the 10 most important AI stories from the past 24 hours that are directly relevant to business professionals and decision-makers across industries including law, finance, healthcare, media, marketing, energy, construction, logistics, education, defense, engineering, manufacturing and retail. Focus on AI adoption by businesses and organisations, regulatory changes affecting industries, AI tools changing professional workflows, and major funding or partnerships. Avoid academic research, developer tools, and generic AI model benchmarks unless they have clear business implications.";
+
 const btn = (extra: React.CSSProperties = {}): React.CSSProperties => ({
   fontSize: 12, fontFamily: "monospace", cursor: "pointer",
   padding: "7px 12px", border: "0.5px solid #e5e5e5", borderRadius: 6,
@@ -84,6 +104,12 @@ export default function AdminPage() {
   const [generating, setGenerating] = useState<string | null>(null);
   const [generatingHighlights, setGeneratingHighlights] = useState(false);
   const [highlightsData, setHighlightsData] = useState<{ createdAt: string | null; storyCount: number } | null>(null);
+  const [top10Data, setTop10Data] = useState<{ createdAt: string | null; storyCount: number } | null>(null);
+  const [top10Prompt, setTop10Prompt] = useState(DEFAULT_TOP10_PROMPT);
+  const [top10PromptDraft, setTop10PromptDraft] = useState("");
+  const [editingTop10, setEditingTop10] = useState(false);
+  const [savingTop10, setSavingTop10] = useState(false);
+  const [generatingTop10, setGeneratingTop10] = useState(false);
   const [editingSlug, setEditingSlug] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ name: "", icon: "globe", focus: "" });
   const [saving, setSaving] = useState(false);
@@ -94,7 +120,40 @@ export default function AdminPage() {
   const [newFocus, setNewFocus] = useState("");
   const [addSaving, setAddSaving] = useState(false);
 
-  useEffect(() => { loadIndustries(); loadHighlights(); }, []);
+  useEffect(() => { loadIndustries(); loadHighlights(); loadTop10(); }, []);
+
+  async function loadTop10() {
+    const [{ data: latest }, { data: config }] = await Promise.all([
+      supabase.from("top10").select("created_at, stories").order("created_at", { ascending: false }).limit(1).maybeSingle(),
+      supabase.from("top10_config").select("prompt").eq("id", 1).maybeSingle(),
+    ]);
+    setTop10Data(latest
+      ? { createdAt: latest.created_at, storyCount: Array.isArray(latest.stories) ? latest.stories.length : 0 }
+      : { createdAt: null, storyCount: 0 }
+    );
+    setTop10Prompt(config?.prompt || DEFAULT_TOP10_PROMPT);
+  }
+
+  async function saveTop10Prompt() {
+    setSavingTop10(true);
+    const { error: err } = await supabase.from("top10_config").upsert({ id: 1, prompt: top10PromptDraft, updated_at: new Date().toISOString() });
+    if (err) { setError(err.message); }
+    else { setTop10Prompt(top10PromptDraft); setEditingTop10(false); flash("Prompt saved."); }
+    setSavingTop10(false);
+  }
+
+  async function generateTop10() {
+    setGeneratingTop10(true);
+    try {
+      const res = await fetch("/api/top10");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed");
+      flash(`Done: ${data.storyCount} stories.`);
+      await loadTop10();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Something went wrong");
+    } finally { setGeneratingTop10(false); }
+  }
 
   async function loadHighlights() {
     const { data } = await supabase
@@ -244,6 +303,63 @@ export default function AdminPage() {
 
           {loading ? <p style={{ fontFamily: "monospace", fontSize: 12, color: "#ccc" }}>Loading...</p> : (
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {/* Top 10 Daily News row */}
+              <div style={{ background: "#f0f0ef", border: "0.5px solid #e5e5e5", borderRadius: 10, overflow: "hidden" }}>
+                {editingTop10 ? (
+                  <div style={{ padding: "18px 16px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+                      <div style={{ width: 38, height: 38, borderRadius: 9, background: "#ebebea", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <Newspaper size={19} strokeWidth={1.5} color="#555" />
+                      </div>
+                      <p style={{ margin: 0, fontSize: 14, color: "#111" }}>Top 10 Daily News</p>
+                    </div>
+                    <div style={{ marginBottom: 16 }}>
+                      <label style={lbl}>Search prompt</label>
+                      <textarea
+                        style={{ ...input, minHeight: 160, resize: "vertical" }}
+                        value={top10PromptDraft}
+                        onChange={e => setTop10PromptDraft(e.target.value)}
+                      />
+                    </div>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button onClick={saveTop10Prompt} disabled={savingTop10}
+                        style={{ flex: 1, padding: "11px 0", fontSize: 14, fontFamily: "sans-serif", cursor: "pointer", border: "1px solid #111", borderRadius: 8, background: "#111", color: "#fff", fontWeight: 500, opacity: savingTop10 ? 0.6 : 1 }}>
+                        {savingTop10 ? "Saving..." : "Save changes"}
+                      </button>
+                      <button onClick={() => setEditingTop10(false)}
+                        style={{ padding: "11px 16px", fontSize: 14, fontFamily: "sans-serif", cursor: "pointer", border: "0.5px solid #ddd", borderRadius: 8, background: "transparent", color: "#888" }}>
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="ind-card-inner" style={{ padding: "14px 16px", display: "flex", alignItems: "flex-start", gap: 12 }}>
+                    <div style={{ display: "flex", alignItems: "flex-start", gap: 12, flex: 1, minWidth: 0 }}>
+                      <div style={{ width: 38, height: 38, borderRadius: 9, background: "#ebebea", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <Newspaper size={19} strokeWidth={1.5} color="#555" />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ margin: "0 0 2px", fontSize: 14, color: "#111" }}>Top 10 Daily News</p>
+                        <p style={{ margin: 0, fontSize: 12, color: "#aaa", fontFamily: "sans-serif", lineHeight: 1.5 }}>
+                          {top10Data?.createdAt
+                            ? `Last generated ${timeAgo(top10Data.createdAt)} · ${top10Data.storyCount} stories`
+                            : "Never generated"}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="ind-actions" style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                      <button onClick={() => { setTop10PromptDraft(top10Prompt); setEditingTop10(true); }} style={btn()}>
+                        Edit
+                      </button>
+                      <button onClick={generateTop10} disabled={generatingTop10}
+                        style={btn({ color: "#16a34a", borderColor: "#bbf7d0", opacity: generatingTop10 ? 0.5 : 1 })}>
+                        {generatingTop10 ? "Working..." : "Generate"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* Highlights row */}
               <div style={{ background: "#f0f0ef", border: "0.5px solid #e5e5e5", borderRadius: 10, overflow: "hidden" }}>
                 <div className="ind-card-inner" style={{ padding: "14px 16px", display: "flex", alignItems: "flex-start", gap: 12 }}>

@@ -261,6 +261,10 @@ export default function AdminPage() {
                     </div>
                   </div>
                   <div className="ind-actions" style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                    <Link href="/highlights"
+                      style={{ ...btn(), color: "#aaa", textDecoration: "none", display: "inline-block" }}>
+                      View ↗
+                    </Link>
                     <button onClick={generateHighlights} disabled={generatingHighlights}
                       style={btn({ color: "#16a34a", borderColor: "#bbf7d0", opacity: generatingHighlights ? 0.5 : 1 })}>
                       {generatingHighlights ? "Working..." : "Generate"}

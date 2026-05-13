@@ -2,6 +2,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 
+export const dynamic = "force-dynamic";
+
 const WEB_SEARCH_TOOL = { type: "web_search_20250305", name: "web_search" } as any;
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 

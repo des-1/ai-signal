@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import {
@@ -66,9 +66,8 @@ export default function HighlightsPage() {
   const [stories, setStories] = useState<HighlightStory[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [pageLoading, setPageLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
-  const [dbFresh, setDbFresh] = useState(false);
   const [loadingPhrase, setLoadingPhrase] = useState("Searching across all industries...");
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
@@ -81,10 +80,8 @@ export default function HighlightsPage() {
     "Building your highlights...",
   ];
 
-  useEffect(() => { loadLatest(); }, []);
-
-  async function loadLatest() {
-    setLoading(true);
+  const loadLatest = useCallback(async () => {
+    setPageLoading(true);
     const { data } = await supabase
       .from("highlights")
       .select("*")
@@ -95,10 +92,11 @@ export default function HighlightsPage() {
     if (data) {
       setStories(data.stories);
       setGeneratedAt(data.created_at);
-      setDbFresh(Date.now() - new Date(data.created_at).getTime() < FRESH_MS);
     }
-    setLoading(false);
-  }
+    setPageLoading(false);
+  }, []);
+
+  useEffect(() => { loadLatest(); }, [loadLatest]);
 
   async function generate() {
     setGenerating(true);
@@ -113,9 +111,8 @@ export default function HighlightsPage() {
       const res = await fetch("/api/highlights");
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to generate");
-      setStories(data.stories);
-      setGeneratedAt(data.generatedAt);
       setSelected(new Set());
+      await loadLatest();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong");
     } finally {
@@ -160,6 +157,16 @@ export default function HighlightsPage() {
     weekday: "long", day: "numeric", month: "long", year: "numeric",
   });
 
+  if (pageLoading) {
+    return (
+      <main style={{ minHeight: "100vh", background: "#fafaf9", display: "flex", justifyContent: "center", padding: "3rem 1rem" }}>
+        <div style={{ maxWidth: 720, width: "100%", fontFamily: "monospace", fontSize: 12, color: "#aaa", paddingTop: 60 }}>
+          Loading...
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main style={{ minHeight: "100vh", background: "#fafaf9", padding: "2rem 1rem" }}>
       <div style={{ maxWidth: 720, margin: "0 auto", fontFamily: "'Georgia', serif" }}>
@@ -189,7 +196,7 @@ export default function HighlightsPage() {
         </div>
 
         {/* Generate button */}
-        {!generating && (!stories.length || !dbFresh) && (
+        {!generating && (!stories.length || !isFresh) && (
           <button
             onClick={generate}
             style={{
@@ -224,8 +231,15 @@ export default function HighlightsPage() {
           </div>
         )}
 
+        {/* Empty state */}
+        {!generating && stories.length === 0 && (
+          <p style={{ fontFamily: "monospace", fontSize: 12, color: "#aaa", textAlign: "center", padding: "2rem 0" }}>
+            No highlights generated yet — hit Generate to get started
+          </p>
+        )}
+
         {/* Stories by industry */}
-        {!loading && stories.length > 0 && (
+        {stories.length > 0 && (
           <>
             {/* Selection summary */}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 8 }}>

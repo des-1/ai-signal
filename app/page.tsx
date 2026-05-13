@@ -146,12 +146,7 @@ export default function Home() {
                 Industry Intelligence — RepresentAI
               </p>
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <Link href="/highlights" style={{ fontSize: 11, fontFamily: "monospace", color: "#aaa", textDecoration: "none", padding: "4px 10px", border: "0.5px solid #ddd", borderRadius: 4 }}>
-                Highlights
-              </Link>
-              <p style={{ fontSize: 11, fontFamily: "monospace", color: "#999", margin: 0 }}>{today}</p>
-            </div>
+            <p style={{ fontSize: 11, fontFamily: "monospace", color: "#999", margin: 0 }}>{today}</p>
           </div>
           <div style={{ borderBottom: "0.5px solid #ddd", marginTop: 10 }} />
         </div>

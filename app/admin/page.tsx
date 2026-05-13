@@ -24,7 +24,7 @@ import { Industry, supabase } from "@/lib/supabase";
 import {
   Megaphone, Scale, TrendingUp, HeartPulse, Zap, Sprout, Cpu, Factory,
   HardHat, Truck, GraduationCap, Shield, Wrench, Music, ShoppingBag,
-  Globe, Building2, Landmark, FlaskConical, Plane, Sparkles, Newspaper, LucideIcon
+  Globe, Building2, Landmark, FlaskConical, Plane, Newspaper, LucideIcon
 } from "lucide-react";
 
 function timeAgo(date: string) {
@@ -102,8 +102,6 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [generating, setGenerating] = useState<string | null>(null);
-  const [generatingHighlights, setGeneratingHighlights] = useState(false);
-  const [highlightsData, setHighlightsData] = useState<{ createdAt: string | null; storyCount: number } | null>(null);
   const [top10Data, setTop10Data] = useState<{ createdAt: string | null; storyCount: number } | null>(null);
   const [top10Prompt, setTop10Prompt] = useState(DEFAULT_TOP10_PROMPT);
   const [top10PromptDraft, setTop10PromptDraft] = useState("");
@@ -120,7 +118,7 @@ export default function AdminPage() {
   const [newFocus, setNewFocus] = useState("");
   const [addSaving, setAddSaving] = useState(false);
 
-  useEffect(() => { loadIndustries(); loadHighlights(); loadTop10(); }, []);
+  useEffect(() => { loadIndustries(); loadTop10(); }, []);
 
   async function loadTop10() {
     const [{ data: latest }, { data: config }] = await Promise.all([
@@ -153,19 +151,6 @@ export default function AdminPage() {
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong");
     } finally { setGeneratingTop10(false); }
-  }
-
-  async function loadHighlights() {
-    const { data } = await supabase
-      .from("highlights")
-      .select("created_at, stories")
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    setHighlightsData(data
-      ? { createdAt: data.created_at, storyCount: Array.isArray(data.stories) ? data.stories.length : 0 }
-      : { createdAt: null, storyCount: 0 }
-    );
   }
 
   async function loadIndustries() {
@@ -224,19 +209,6 @@ export default function AdminPage() {
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong");
     } finally { setGenerating(null); }
-  }
-
-  async function generateHighlights() {
-    setGeneratingHighlights(true);
-    try {
-      const res = await fetch("/api/highlights");
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed");
-      flash(`Done: ${data.storyCount} stories across ${data.industryCount} industries.`);
-      await loadHighlights();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Something went wrong");
-    } finally { setGeneratingHighlights(false); }
   }
 
   async function addIndustry() {
@@ -362,35 +334,6 @@ export default function AdminPage() {
                     </div>
                   </div>
                 )}
-              </div>
-
-              {/* Highlights row */}
-              <div style={{ background: "#f0f0ef", border: "0.5px solid #e5e5e5", borderRadius: 10, overflow: "hidden" }}>
-                <div className="ind-card-inner" style={{ padding: "14px 16px", display: "flex", alignItems: "flex-start", gap: 12 }}>
-                  <div style={{ display: "flex", alignItems: "flex-start", gap: 12, flex: 1, minWidth: 0 }}>
-                    <div style={{ width: 38, height: 38, borderRadius: 9, background: "#ebebea", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                      <Sparkles size={19} strokeWidth={1.5} color="#555" />
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <p style={{ margin: "0 0 2px", fontSize: 14, color: "#111" }}>Industry Highlights</p>
-                      <p style={{ margin: 0, fontSize: 12, color: "#aaa", fontFamily: "sans-serif", lineHeight: 1.5 }}>
-                        {highlightsData?.createdAt
-                          ? `Last generated ${timeAgo(highlightsData.createdAt)} · ${highlightsData.storyCount} stories`
-                          : "Never generated"}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="ind-actions" style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                    <Link href="/highlights"
-                      style={{ ...btn(), color: "#aaa", textDecoration: "none", display: "inline-block" }}>
-                      View ↗
-                    </Link>
-                    <button onClick={generateHighlights} disabled={generatingHighlights}
-                      style={btn({ color: "#16a34a", borderColor: "#bbf7d0", opacity: generatingHighlights ? 0.5 : 1 })}>
-                      {generatingHighlights ? "Working..." : "Generate"}
-                    </button>
-                  </div>
-                </div>
               </div>
 
               {industries.map((ind) => (

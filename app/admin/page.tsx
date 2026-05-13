@@ -70,6 +70,7 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [generating, setGenerating] = useState<string | null>(null);
+  const [generatingAll, setGeneratingAll] = useState(false);
   const [editingSlug, setEditingSlug] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ name: "", icon: "globe", focus: "" });
   const [saving, setSaving] = useState(false);
@@ -140,6 +141,19 @@ export default function AdminPage() {
     } finally { setGenerating(null); }
   }
 
+  async function generateAll() {
+    if (!confirm("Generate highlights for all active industries? This takes 60-90 seconds and updates all industry digests.")) return;
+    setGeneratingAll(true);
+    try {
+      const res = await fetch("/api/highlights");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed");
+      flash(`Done: ${data.storyCount} stories across ${data.industryCount} industries.`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Something went wrong");
+    } finally { setGeneratingAll(false); }
+  }
+
   async function addIndustry() {
     if (!newName.trim() || !newFocus.trim()) { setError("Name and focus areas are required."); return; }
     setAddSaving(true); setError("");
@@ -195,6 +209,22 @@ export default function AdminPage() {
         {/* Feedback */}
         {error && <div style={{ padding: "10px 14px", borderRadius: 8, border: "1px solid #fca5a5", background: "#fef2f2", color: "#991b1b", fontSize: 13, fontFamily: "sans-serif", marginBottom: 16 }}>{error}</div>}
         {success && <div style={{ padding: "10px 14px", borderRadius: 8, border: "1px solid #86efac", background: "#f0fdf4", color: "#15803d", fontSize: 13, fontFamily: "sans-serif", marginBottom: 16 }}>{success}</div>}
+
+        {/* Quick actions */}
+        <div style={{ display: "flex", gap: 10, marginBottom: 28, flexWrap: "wrap" }}>
+          <Link href="/highlights"
+            style={{ flex: 1, minWidth: 140, padding: "12px 0", fontSize: 13, fontFamily: "sans-serif",
+              border: "0.5px solid #e5e5e5", borderRadius: 8, background: "#fff", color: "#111",
+              textDecoration: "none", textAlign: "center" as const, display: "block" }}>
+            View Highlights ↗
+          </Link>
+          <button onClick={generateAll} disabled={generatingAll}
+            style={{ flex: 1, minWidth: 140, padding: "12px 0", fontSize: 13, fontFamily: "sans-serif",
+              cursor: generatingAll ? "not-allowed" : "pointer", border: "1px solid #111",
+              borderRadius: 8, background: "#111", color: "#fff", fontWeight: 500, opacity: generatingAll ? 0.6 : 1 }}>
+            {generatingAll ? "Generating... (~90s)" : "Generate All Highlights"}
+          </button>
+        </div>
 
         {/* Industries */}
         <div style={{ marginBottom: 40 }}>

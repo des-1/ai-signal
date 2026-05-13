@@ -28,7 +28,7 @@ function buildWhatsApp(selected: Top10Story[]): string {
   const date = new Date().toLocaleDateString("en-GB", {
     day: "numeric", month: "long", year: "numeric",
   });
-  let msg = `Daily AI News - Top 10\n${date}\n\n`;
+  let msg = `Daily AI News\n${date}\n\n`;
   selected.forEach((s, i) => {
     msg += `[${s.tag}] *${s.headline}*\n${s.summary}`;
     if (s.url) msg += `\n\n${s.url}`;

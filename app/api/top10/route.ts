@@ -25,17 +25,19 @@ Story rules:
 - summary: 2-3 sentences — what happened and why it matters for business professionals. Include enough context that a non-technical reader understands the significance.
 - url: the actual article URL — always include it
 
-Industry coverage — MANDATORY:
-The 10 stories MUST include at least one story from each of these five industries:
-1. Finance & Banking
-2. Law & Legal
-3. Healthcare & Pharmaceutical
-4. Media & Marketing
-5. Defense & Security
+MANDATORY INDUSTRY COVERAGE - this is non-negotiable:
+You MUST include at least one story specifically about each of these industries:
+1. Finance & Banking — must be about banks, fintech, trading, wealth management or financial services AI. A drug discovery funding story does NOT count.
+2. Law & Legal — AI in law firms, courts, legal tools
+3. Healthcare & Pharmaceutical — AI in hospitals, clinical trials, medical devices, patient care
+4. Media & Marketing — AI in advertising, content creation, social platforms
+5. Defense & Security — AI in military, cybersecurity, national security
 
-These 5 are non-negotiable. If you cannot find a story from one of these industries in the past 24 hours, use the most recent story from that industry even if it is a few days old.
+These 5 mandatory slots must be filled first before selecting any other stories. If you cannot find a story from one of these industries in the past 24 hours, use the most recent story from that industry even if it is a few days old.
 
-The remaining 5 stories must come from other industries such as energy, construction, logistics, education, engineering, manufacturing, retail, or technology.
+If you have filled all 5 mandatory slots and still have 5 remaining stories, fill those with the best stories from any other industries such as energy, construction, logistics, education, engineering, manufacturing, retail, or technology.
+
+Do not tag a story with an industry label that does not match its actual content.
 
 Variety rules — CRITICAL:
 - Maximum 2 stories from any single industry or topic area across all 10 stories

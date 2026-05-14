@@ -25,6 +25,25 @@ Story rules:
 - summary: 2-3 sentences — what happened and why it matters for business professionals. Include enough context that a non-technical reader understands the significance.
 - url: the actual article URL — always include it
 
+Industry coverage — MANDATORY:
+The 10 stories MUST include at least one story from each of these five industries:
+1. Finance & Banking
+2. Law & Legal
+3. Healthcare & Pharmaceutical
+4. Media & Marketing
+5. Defense & Security
+
+These 5 are non-negotiable. If you cannot find a story from one of these industries in the past 24 hours, use the most recent story from that industry even if it is a few days old.
+
+The remaining 5 stories must come from other industries such as energy, construction, logistics, education, engineering, manufacturing, retail, or technology.
+
+Variety rules — CRITICAL:
+- Maximum 2 stories from any single industry or topic area across all 10 stories
+- No two stories may cover the same event or announcement from different angles — if Reuters and TechCrunch both cover the same OpenAI announcement, pick one
+- Actively seek variety: if you already have 2 finance stories, skip the next finance story in favour of a different industry
+- Prioritise breadth over depth — the goal is to cover as many different industries and topics as possible
+- Do not cluster stories around a single theme (e.g. do not pick 3 stories all about AI regulation, or 3 stories all about foundation models)
+
 Source rules — critical:
 - Prioritise freely accessible sources: TechCrunch, Reuters, BBC, Forbes, The Guardian, Bloomberg (free articles), Wired, The Verge, Ars Technica, Fast Company, MIT Technology Review, VentureBeat, Business Insider, AP News, Financial Times (free), Gov.uk, official company blogs and press releases
 - Avoid paywalled sources: Wall Street Journal, New York Times, The Economist, and any source requiring a subscription or login

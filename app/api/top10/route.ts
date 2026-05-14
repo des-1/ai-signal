@@ -9,61 +9,130 @@ const WEB_SEARCH_TOOL = { type: "web_search_20250305", name: "web_search" } as a
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 const DEFAULT_PROMPT =
-  "Find the 10 most important AI stories from the past 24 hours that are directly relevant to business professionals and decision-makers across industries including law, finance, healthcare, media, marketing, energy, construction, logistics, education, defense, engineering, manufacturing and retail. Focus on AI adoption by businesses and organisations, regulatory changes affecting industries, AI tools changing professional workflows, and major funding or partnerships. Avoid academic research, developer tools, and generic AI model benchmarks unless they have clear business implications.";
+  "Search for AI news stories published in the past 24-48 hours. Work through each mandatory industry one by one. For each one, run a targeted search before moving to the next.";
 
-const SYSTEM_PROMPT = `You are an AI news analyst for RepresentAI, a UK organisation focused on AI literacy across professional sectors. Your job is to find and curate exactly 10 of the most important AI news stories from the past 24 hours that are directly relevant to business professionals.
+type IndustryRow = { name: string; slug: string; focus: string };
 
-Return a JSON array with exactly 10 items — no preamble, no markdown, no backticks:
-[
-  {"headline":"...","source":"...","tag":"...","summary":"...","url":"..."}
-]
+const MANDATORY_DEFS = [
+  {
+    label: "Finance & Banking",
+    match: (n: string) => /finance|bank/i.test(n),
+    qualifies:
+      "banks, fintech companies, trading platforms, wealth management, insurance, payment providers, financial regulators, investment banks",
+    doesNotQualify:
+      "a story about another industry that happens to mention funding or investment",
+  },
+  {
+    label: "Law & Legal",
+    match: (n: string) => /law|legal/i.test(n),
+    qualifies:
+      "law firms, courts, legal technology, regulation affecting the legal profession, bar associations, in-house legal teams",
+  },
+  {
+    label: "Healthcare & Pharmaceutical",
+    match: (n: string) => /health|pharma|medical/i.test(n),
+    qualifies:
+      "hospitals, clinical trials, medical devices, patient care, pharmaceutical companies, health insurers, medical regulators like FDA or MHRA",
+  },
+  {
+    label: "Media & Marketing",
+    match: (n: string) => /media|market|advertis/i.test(n),
+    qualifies:
+      "advertising platforms, agencies, brands, content creation, social media platforms in an advertising context, publishers",
+  },
+  {
+    label: "Defense & Security",
+    match: (n: string) => /defense|defence|security|military/i.test(n),
+    qualifies:
+      "military, defence contractors, national security agencies, cybersecurity companies, intelligence services",
+  },
+];
 
-Story rules:
-- headline: max 12 words, sharp and editorial
-- source: the actual publication name
-- tag: one of exactly: Advertising, Content, Search, Social, Generative AI, Tools, Regulation, Strategy, Legal, Finance, Risk
-- summary: 2-3 sentences — what happened and why it matters for business professionals. Include enough context that a non-technical reader understands the significance.
-- url: the actual article URL — always include it
+function buildSystemPrompt(industries: IndustryRow[]): string {
+  const mandatoryLines = MANDATORY_DEFS.map((def, i) => {
+    const match = industries.find((ind) => def.match(ind.name));
+    const focusLine = match?.focus
+      ? `   Focus areas from RepresentAI: ${match.focus}`
+      : "";
+    const dontLine = def.doesNotQualify
+      ? `   Does NOT qualify: ${def.doesNotQualify}`
+      : "";
+    return [
+      `${i + 1}. ${def.label}`,
+      `   Qualifies: ${def.qualifies}.`,
+      focusLine,
+      dontLine,
+    ]
+      .filter(Boolean)
+      .join("\n");
+  });
 
-MANDATORY INDUSTRY COVERAGE - this is non-negotiable:
-You MUST include at least one story specifically about each of these industries:
-1. Finance & Banking — must be about banks, fintech, trading, wealth management or financial services AI. A drug discovery funding story does NOT count.
-2. Law & Legal — AI in law firms, courts, legal tools
-3. Healthcare & Pharmaceutical — AI in hospitals, clinical trials, medical devices, patient care
-4. Media & Marketing — AI in advertising, content creation, social platforms
-5. Defense & Security — AI in military, cybersecurity, national security
+  const mandatorySlugs = new Set(
+    MANDATORY_DEFS.map((def) => industries.find((ind) => def.match(ind.name))?.slug).filter(Boolean)
+  );
 
-These 5 mandatory slots must be filled first before selecting any other stories. If you cannot find a story from one of these industries in the past 24 hours, use the most recent story from that industry even if it is a few days old.
+  const remainingIndustries = industries.filter((ind) => !mandatorySlugs.has(ind.slug));
 
-If you have filled all 5 mandatory slots and still have 5 remaining stories, fill those with the best stories from any other industries such as energy, construction, logistics, education, engineering, manufacturing, retail, or technology.
+  const remainingLines = remainingIndustries
+    .map((ind) => `- ${ind.name}: ${ind.focus}`)
+    .join("\n");
 
-Do not tag a story with an industry label that does not match its actual content.
+  return `You are a strict AI news curator for RepresentAI, a UK organisation focused on AI literacy for business professionals. Your job is to find and return exactly 10 AI news stories from the past 24-48 hours.
 
-Variety rules — CRITICAL:
-- Maximum 2 stories from any single industry or topic area across all 10 stories
-- No two stories may cover the same event or announcement from different angles — if Reuters and TechCrunch both cover the same OpenAI announcement, pick one
-- Actively seek variety: if you already have 2 finance stories, skip the next finance story in favour of a different industry
-- Prioritise breadth over depth — the goal is to cover as many different industries and topics as possible
-- Do not cluster stories around a single theme (e.g. do not pick 3 stories all about AI regulation, or 3 stories all about foundation models)
+STEP 1 — MANDATORY INDUSTRIES (fill these first, in order):
+You MUST find exactly one story for each of the 5 industries below before doing anything else. Search specifically for each one. Do not move to the next until you have found a qualifying story for the current one.
 
-Source rules — critical:
-- Prioritise freely accessible sources: TechCrunch, Reuters, BBC, Forbes, The Guardian, Bloomberg (free articles), Wired, The Verge, Ars Technica, Fast Company, MIT Technology Review, VentureBeat, Business Insider, AP News, Financial Times (free), Gov.uk, official company blogs and press releases
-- Avoid paywalled sources: Wall Street Journal, New York Times, The Economist, and any source requiring a subscription or login
-- Never use PR Newswire, Business Wire, GlobeNewswire
+${mandatoryLines.join("\n\n")}
+
+STEP 2 — REMAINING 5 STORIES:
+Fill the remaining 5 slots with the best AI stories from the industries listed below. Each story must come from a DIFFERENT industry. Do not repeat any industry already used in Step 1.
+
+Available industries and focus areas:
+${remainingLines || "Energy, Construction, Logistics, Education, Engineering, Manufacturing, Retail, Technology — pick the best 5 stories from distinct industries."}
+
+STEP 3 — SELF-CHECK (mandatory before responding):
+Before returning your answer, verify each item:
+□ Exactly 5 mandatory industries covered, one story each
+□ Exactly 5 additional stories from 5 different industries
+□ No industry appears more than once across all 10 stories
+□ No two stories cover the same event or announcement
+□ Every story URL is freely accessible (no paywalls)
+□ Every story is from the past 24-48 hours — if genuinely nothing exists for a mandatory industry, you may use the past 7 days but flag it with "(older story)" at the end of the summary
+□ Total stories = exactly 10
+
+If any check fails, fix it before responding. Do not return the JSON until all checks pass.
+
+SOURCE RULES:
+- Only freely accessible sources: TechCrunch, Reuters, BBC, Forbes, The Guardian, Wired, The Verge, VentureBeat, MIT Technology Review, Fast Company, AP News, Gov.uk, official company blogs and press releases
+- Never use: Wall Street Journal, New York Times, The Economist, or any source requiring login or subscription
+- Never use: PR Newswire, Business Wire, GlobeNewswire
 - Prefer original reporting over aggregators
 
-Return exactly 10 stories. Order by importance — most impactful first.`;
+OUTPUT FORMAT:
+Return only a valid JSON array. No preamble, no markdown, no backticks.
+[
+  {
+    "headline": "max 12 words, sharp and editorial",
+    "source": "Publication Name",
+    "tag": "exact industry name matching one of the industries listed above",
+    "summary": "2-3 sentences — what happened and why it matters for business professionals. Include enough context for a non-technical reader.",
+    "url": "actual article URL"
+  }
+]`;
+}
 
 export async function GET() {
   const db = supabaseAdmin();
 
-  const { data: config } = await db
-    .from("top10_config")
-    .select("prompt")
-    .eq("id", 1)
-    .maybeSingle();
+  const [{ data: config }, { data: industries }] = await Promise.all([
+    db.from("top10_config").select("prompt").eq("id", 1).maybeSingle(),
+    db.from("industries").select("name, slug, focus").eq("active", true).order("created_at", { ascending: true }),
+  ]);
 
   const userPrompt = config?.prompt || DEFAULT_PROMPT;
+  const systemPrompt = buildSystemPrompt((industries as IndustryRow[]) || []);
+
+  console.log("[top10] Building prompt with", industries?.length ?? 0, "industries");
 
   try {
     const messages: Anthropic.MessageParam[] = [
@@ -73,13 +142,13 @@ export async function GET() {
     let response = await client.messages.create({
       model: "claude-sonnet-4-6",
       max_tokens: 4096,
-      system: SYSTEM_PROMPT,
+      system: systemPrompt,
       tools: [WEB_SEARCH_TOOL],
       messages,
     });
 
     let iterations = 0;
-    while (response.stop_reason === "tool_use" && iterations++ < 10) {
+    while (response.stop_reason === "tool_use" && iterations++ < 15) {
       const assistantContent = response.content;
       messages.push({ role: "assistant", content: assistantContent });
 
@@ -99,7 +168,7 @@ export async function GET() {
       response = await client.messages.create({
         model: "claude-sonnet-4-6",
         max_tokens: 4096,
-        system: SYSTEM_PROMPT,
+        system: systemPrompt,
         tools: [WEB_SEARCH_TOOL],
         messages,
       });

@@ -49,7 +49,7 @@ function buildWhatsApp(digest: DigestRecord, industryName: string): string {
   return msg;
 }
 
-const FRESH_THRESHOLD_MS = 24 * 60 * 60 * 1000; // 24 hours
+const FRESH_THRESHOLD_MS = 12 * 60 * 60 * 1000;
 
 export default function DigestPage({ params }: { params: { slug: string } }) {
   const { slug } = params;

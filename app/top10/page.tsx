@@ -38,7 +38,7 @@ function buildWhatsApp(selected: Top10Story[]): string {
   return msg;
 }
 
-const FRESH_MS = 24 * 60 * 60 * 1000;
+const FRESH_MS = 12 * 60 * 60 * 1000;
 
 export default function Top10Page() {
   const [stories, setStories] = useState<Top10Story[]>([]);

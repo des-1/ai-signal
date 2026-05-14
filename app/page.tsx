@@ -39,7 +39,7 @@ function timeAgo(date: string) {
 function freshnessStatus(date: string | null): "today" | "week" | "stale" | "never" {
   if (!date) return "never";
   const diff = Date.now() - new Date(date).getTime();
-  if (diff < 24 * 60 * 60 * 1000) return "today";
+  if (diff < 12 * 60 * 60 * 1000) return "today";
   if (diff < 7 * 24 * 60 * 60 * 1000) return "week";
   return "stale";
 }

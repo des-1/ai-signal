@@ -140,7 +140,7 @@ SOURCE RULES:
 - Prefer original reporting over aggregators
 
 OUTPUT FORMAT:
-Return only a valid JSON array. No preamble, no markdown, no backticks.
+Return only a valid JSON array. No preamble, no markdown, no backticks, no ellipsis placeholders (do not use ... anywhere in the JSON).
 [
   {
     "headline": "max 12 words, sharp and editorial",
@@ -217,7 +217,18 @@ export async function GET() {
       return NextResponse.json({ error: "Could not parse stories", raw: rawText }, { status: 500 });
     }
 
-    const stories = JSON.parse(jsonStr);
+    // Strip ellipsis placeholders Claude sometimes inserts (e.g. [..., ..., {real}] or field: "...")
+    const sanitised = jsonStr
+      .replace(/,\s*\.\.\.\s*(?=[,\]])/g, "")  // trailing ellipsis entries: , ...
+      .replace(/\[\s*\.\.\.\s*,\s*/g, "[");      // leading ellipsis entries: [... ,
+
+    let stories: any[];
+    try {
+      stories = JSON.parse(sanitised);
+    } catch (parseErr) {
+      console.error("[top10] JSON.parse failed. Extracted:", sanitised.slice(0, 800));
+      return NextResponse.json({ error: `JSON parse error: ${(parseErr as Error).message}`, raw: rawText }, { status: 500 });
+    }
     console.log("[top10] Parsed", stories.length, "stories:", stories.map((s: any) => s.headline));
 
     const { data: saved, error: insertError } = await db

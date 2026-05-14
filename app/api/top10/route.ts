@@ -110,9 +110,10 @@ export async function GET() {
       .map((b) => b.text)
       .join("");
 
-    const match = rawText.replace(/```[a-z]*/g, "").trim().match(/\[[\s\S]*\]/);
+    const cleaned = rawText.replace(/```[a-z]*\n?/g, "").replace(/```/g, "").trim();
+    const match = cleaned.match(/\[[\s\S]*\]/);
     if (!match) {
-      console.error("[top10] Could not parse JSON array from response. Raw text:", rawText.slice(0, 500));
+      console.error("[top10] Could not parse JSON array. Raw text:", rawText);
       return NextResponse.json({ error: "Could not parse stories", raw: rawText }, { status: 500 });
     }
 

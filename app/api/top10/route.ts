@@ -48,6 +48,27 @@ const MANDATORY_DEFS = [
   },
 ];
 
+function extractJsonArray(text: string): string | null {
+  const start = text.indexOf("[");
+  if (start === -1) return null;
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (escape) { escape = false; continue; }
+    if (ch === "\\" && inString) { escape = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (ch === "[" || ch === "{") depth++;
+    else if (ch === "]" || ch === "}") {
+      depth--;
+      if (depth === 0) return text.slice(start, i + 1);
+    }
+  }
+  return null;
+}
+
 function buildSystemPrompt(industries: IndustryRow[]): string {
   const mandatoryLines = MANDATORY_DEFS.map((def, i) => {
     const match = industries.find((ind) => def.match(ind.name));
@@ -180,13 +201,13 @@ export async function GET() {
       .join("");
 
     const cleaned = rawText.replace(/```[a-z]*\n?/g, "").replace(/```/g, "").trim();
-    const match = cleaned.match(/\[[\s\S]*\]/);
-    if (!match) {
-      console.error("[top10] Could not parse JSON array. Raw text:", rawText);
+    const jsonStr = extractJsonArray(cleaned);
+    if (!jsonStr) {
+      console.error("[top10] Could not find JSON array. Raw text:", rawText);
       return NextResponse.json({ error: "Could not parse stories", raw: rawText }, { status: 500 });
     }
 
-    const stories = JSON.parse(match[0]);
+    const stories = JSON.parse(jsonStr);
     console.log("[top10] Parsed", stories.length, "stories:", stories.map((s: any) => s.headline));
 
     const { data: saved, error: insertError } = await db

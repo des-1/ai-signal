@@ -200,14 +200,16 @@ export async function GET() {
 
     let response = await client.messages.create({
       model: "claude-sonnet-4-6",
-      max_tokens: 4096,
+      max_tokens: 8192,
       system: systemPrompt,
       tools: [WEB_SEARCH_TOOL],
       messages,
     });
 
+    const MAX_ITERATIONS = 25;
     let iterations = 0;
-    while (response.stop_reason === "tool_use" && iterations++ < 15) {
+    while (response.stop_reason === "tool_use" && iterations < MAX_ITERATIONS) {
+      iterations++;
       const assistantContent = response.content;
       messages.push({ role: "assistant", content: assistantContent });
 
@@ -226,9 +228,33 @@ export async function GET() {
 
       response = await client.messages.create({
         model: "claude-sonnet-4-6",
-        max_tokens: 4096,
+        max_tokens: 8192,
         system: systemPrompt,
         tools: [WEB_SEARCH_TOOL],
+        messages,
+      });
+    }
+
+    // If still in tool_use after hitting the limit, force a text response
+    if (response.stop_reason === "tool_use") {
+      console.warn("[top10] Hit iteration limit, forcing final JSON output");
+      const assistantContent = response.content;
+      messages.push({ role: "assistant", content: assistantContent });
+      const toolResults: Anthropic.ToolResultBlockParam[] = assistantContent
+        .filter((b): b is Anthropic.ToolUseBlock => b.type === "tool_use")
+        .map((toolUse) => ({
+          type: "tool_result" as const,
+          tool_use_id: toolUse.id,
+          content: JSON.stringify({ status: "search_executed", query: (toolUse.input as { query: string }).query }),
+        }));
+      messages.push({ role: "user", content: toolResults });
+      messages.push({ role: "user", content: "You have done enough research. Stop searching and output your final JSON array now based on the stories you have found." });
+      response = await client.messages.create({
+        model: "claude-sonnet-4-6",
+        max_tokens: 8192,
+        system: systemPrompt,
+        tools: [WEB_SEARCH_TOOL],
+        tool_choice: { type: "auto" },
         messages,
       });
     }

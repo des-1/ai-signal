@@ -186,7 +186,7 @@ async function fetchMandatoryStory(
   const userPrompt = `Search for a recent AI news story about ${industry.label}. Focus on ${today} or ${yesterday}.`;
 
   console.log(`[top10] [${industry.label}] Starting search`);
-  const raw = await runSearchLoop(mandatorySystemPrompt(industry, today, yesterday, industryPast), userPrompt, 1500);
+  const raw = await runSearchLoop(mandatorySystemPrompt(industry, today, yesterday, industryPast), userPrompt, 400);
   const story = parseSingleStory(raw, `[${industry.label}]`);
 
   if (story?.headline && story?.url) {
@@ -196,7 +196,7 @@ async function fetchMandatoryStory(
 
   // Retry without exclusions
   console.log(`[top10] [${industry.label}] Failed, retrying without exclusions`);
-  const rawFallback = await runSearchLoop(mandatorySystemPrompt(industry, today, yesterday, []), userPrompt, 1500);
+  const rawFallback = await runSearchLoop(mandatorySystemPrompt(industry, today, yesterday, []), userPrompt, 400);
   const fallback = parseSingleStory(rawFallback, `[${industry.label}] fallback`);
 
   if (fallback?.headline && fallback?.url) {
@@ -286,7 +286,7 @@ Return a valid JSON array of exactly 5 stories:
 [{"headline":"max 12 words","source":"Publication Name","tag":"industry name","summary":"2-3 sentences for a non-technical reader","url":"article URL"}]`;
 
     const remainingUserPrompt = `Find 5 AI news stories from 5 different industries. Do not use these already-covered industries: ${coveredTags}. Run a separate search for each industry.`;
-    const raw2 = await runSearchLoop(remainingSystemPrompt, remainingUserPrompt, 4000);
+    const raw2 = await runSearchLoop(remainingSystemPrompt, remainingUserPrompt, 2000);
     const remaining = parseStories(raw2, "remaining 5");
     if (!remaining) {
       console.warn("[top10] Remaining 5 call failed, saving mandatory stories only");

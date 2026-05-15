@@ -90,6 +90,9 @@ export async function GET(request: NextRequest) {
   }
   console.log(`[digest:${slug}] Exclusions: ${usedUrls.size} URLs, ${usedHeadlines.length} headlines (3d)`);
 
+  const systemPrompt = buildSystemPrompt(industry.name, industry.focus, usedUrls, usedHeadlines);
+  const systemParam = [{ type: "text" as const, text: systemPrompt, cache_control: { type: "ephemeral" as const } }];
+
   try {
     const messages: Anthropic.MessageParam[] = [
       {
@@ -100,8 +103,8 @@ export async function GET(request: NextRequest) {
 
     let response = await client.messages.create({
       model: "claude-sonnet-4-6",
-      max_tokens: 4096,
-      system: buildSystemPrompt(industry.name, industry.focus, usedUrls, usedHeadlines),
+      max_tokens: 2000,
+      system: systemParam,
       tools: [WEB_SEARCH_TOOL],
       messages,
     });
@@ -127,8 +130,8 @@ export async function GET(request: NextRequest) {
 
       response = await client.messages.create({
         model: "claude-sonnet-4-6",
-        max_tokens: 4096,
-        system: buildSystemPrompt(industry.name, industry.focus, usedUrls, usedHeadlines),
+        max_tokens: 2000,
+        system: systemParam,
         tools: [WEB_SEARCH_TOOL],
         messages,
       });

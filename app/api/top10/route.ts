@@ -69,7 +69,7 @@ function extractJsonArray(text: string): string | null {
   return null;
 }
 
-function buildSystemPrompt(industries: IndustryRow[]): string {
+function buildSystemPrompt(industries: IndustryRow[], usedUrls: Set<string>): string {
   const now = new Date();
   const today = now.toISOString().split("T")[0];
   const yesterdayDate = new Date(now);
@@ -110,7 +110,7 @@ TODAY'S DATE: ${today}
 ACCEPTABLE PUBLICATION DATES: ${yesterday} or ${today} only.
 Before including any story, check its publication date. If it was published before ${yesterday}, do not include it — keep searching until you find a more recent story. The only exception is mandatory industries (Step 1) where nothing recent exists; in that case you may go back up to 7 days, but you must add "(this week)" to the end of the headline.
 
-STEP 1 — MANDATORY INDUSTRIES (fill these first, in order):
+${usedUrls.size > 0 ? `PREVIOUSLY USED URLS — do not include any of these in your response, find different stories instead:\n${Array.from(usedUrls).join("\n")}\n\n` : ""}STEP 1 — MANDATORY INDUSTRIES (fill these first, in order):
 You MUST find exactly one story for each of the 5 industries below before doing anything else. Search specifically for each one. Do not move to the next until you have found a qualifying story published on ${today} or ${yesterday}.
 
 ${mandatoryLines.join("\n\n")}
@@ -129,6 +129,7 @@ Before returning your answer, verify each item:
 □ No two stories cover the same event or announcement
 □ Every story URL is freely accessible (no paywalls)
 □ Every story was published on ${today} or ${yesterday} — any older story must be excluded unless it is a mandatory industry fallback, in which case the headline ends with "(this week)"
+□ No URL in your response matches any URL in the PREVIOUSLY USED URLS list above
 □ Total stories = exactly 10
 
 If any check fails, fix it before responding. Do not return the JSON until all checks pass.
@@ -155,13 +156,27 @@ Return only a valid JSON array. No preamble, no markdown, no backticks, no ellip
 export async function GET() {
   const db = supabaseAdmin();
 
-  const [{ data: config }, { data: industries }] = await Promise.all([
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+  const [{ data: config }, { data: industries }, { data: pastRuns }] = await Promise.all([
     db.from("top10_config").select("prompt").eq("id", 1).maybeSingle(),
     db.from("industries").select("name, slug, focus").eq("active", true).order("created_at", { ascending: true }),
+    db.from("top10").select("stories").gte("created_at", sevenDaysAgo.toISOString()),
   ]);
 
+  const usedUrls = new Set<string>();
+  for (const row of pastRuns ?? []) {
+    if (Array.isArray(row.stories)) {
+      for (const story of row.stories) {
+        if (story?.url) usedUrls.add(story.url);
+      }
+    }
+  }
+  console.log("[top10] Loaded", usedUrls.size, "previously used URLs from past 7 days");
+
   const userPrompt = config?.prompt || DEFAULT_PROMPT;
-  const systemPrompt = buildSystemPrompt((industries as IndustryRow[]) || []);
+  const systemPrompt = buildSystemPrompt((industries as IndustryRow[]) || [], usedUrls);
 
   console.log("[top10] Building prompt with", industries?.length ?? 0, "industries");
 
@@ -230,6 +245,12 @@ export async function GET() {
       return NextResponse.json({ error: `JSON parse error: ${(parseErr as Error).message}`, raw: rawText }, { status: 500 });
     }
     console.log("[top10] Parsed", stories.length, "stories:", stories.map((s: any) => s.headline));
+
+    const beforeDedup = stories.length;
+    stories = stories.filter((s: any) => !usedUrls.has(s?.url));
+    if (stories.length < beforeDedup) {
+      console.warn(`[top10] Dedup: filtered out ${beforeDedup - stories.length} story/stories whose URL(s) appeared in the past 7 days`);
+    }
 
     const { data: saved, error: insertError } = await db
       .from("top10")

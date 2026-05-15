@@ -145,23 +145,31 @@ export async function GET() {
 
   const sevenDaysAgo = new Date();
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+  const threeDaysAgo = new Date();
+  threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
 
   const [{ data: industries }, { data: pastRuns }] = await Promise.all([
     db.from("industries").select("name, slug, focus").eq("active", true).order("created_at", { ascending: true }),
-    db.from("top10").select("stories").gte("created_at", sevenDaysAgo.toISOString()),
+    db.from("top10").select("stories, created_at").gte("created_at", sevenDaysAgo.toISOString()),
   ]);
 
+  // 7-day set for server-side dedup; 3-day sets for prompt exclusions
   const usedUrls = new Set<string>();
+  const usedUrlsForPrompt = new Set<string>();
   const usedHeadlines: string[] = [];
   for (const row of pastRuns ?? []) {
+    const rowDate = new Date((row as any).created_at);
     if (Array.isArray(row.stories)) {
       for (const story of row.stories) {
-        if (story?.url) usedUrls.add(story.url);
-        if (story?.headline) usedHeadlines.push(story.headline);
+        if (story?.url) {
+          usedUrls.add(story.url);
+          if (rowDate >= threeDaysAgo) usedUrlsForPrompt.add(story.url);
+        }
+        if (story?.headline && rowDate >= threeDaysAgo) usedHeadlines.push(story.headline);
       }
     }
   }
-  console.log("[top10] Exclusions:", usedUrls.size, "URLs,", usedHeadlines.length, "headlines");
+  console.log("[top10] Exclusions — prompt:", usedUrlsForPrompt.size, "URLs,", usedHeadlines.length, "headlines (3d); dedup:", usedUrls.size, "URLs (7d)");
 
   const now = new Date();
   const today = now.toISOString().split("T")[0];
@@ -175,7 +183,7 @@ export async function GET() {
   );
   const remainingIndustries = allIndustries.filter(ind => !mandatorySlugs.has(ind.slug));
 
-  const systemPrompt = buildSystemPrompt(today, yesterday, usedUrls, usedHeadlines);
+  const systemPrompt = buildSystemPrompt(today, yesterday, usedUrlsForPrompt, usedHeadlines);
 
   try {
     // Call 1: Mandatory 5 industries
@@ -186,11 +194,29 @@ export async function GET() {
 
     console.log("[top10] Call 1: mandatory 5");
     const raw1 = await runSearchLoop(systemPrompt, call1Prompt);
-    const mandatory = parseStories(raw1, "Call 1");
+    console.log("[top10] Call 1 raw response:", raw1.slice(0, 1000));
+    let mandatory = parseStories(raw1, "Call 1");
     if (!mandatory) {
       return NextResponse.json({ error: "Could not parse mandatory stories", raw: raw1 }, { status: 500 });
     }
     console.log("[top10] Call 1:", mandatory.length, "stories:", mandatory.map((s: any) => s.headline));
+
+    if (mandatory.length < 5) {
+      const returnedTags = mandatory.map((s: any) => s.tag).filter(Boolean);
+      const missingIndustries = MANDATORY_INDUSTRIES
+        .filter(ind => !returnedTags.some((t: string) => ind.match(t)))
+        .map(ind => ind.label);
+      console.warn(`[top10] Call 1 only returned ${mandatory.length}/5. Tags: [${returnedTags.join(", ")}]. Missing: [${missingIndustries.join(", ")}]`);
+      console.log("[top10] Call 1 fallback: retrying without exclusion list");
+      const fallbackPrompt = buildSystemPrompt(today, yesterday, new Set(), []);
+      const rawFallback = await runSearchLoop(fallbackPrompt, call1Prompt);
+      console.log("[top10] Call 1 fallback raw:", rawFallback.slice(0, 1000));
+      const fallbackStories = parseStories(rawFallback, "Call 1 fallback");
+      if (fallbackStories && fallbackStories.length > mandatory.length) {
+        console.log("[top10] Call 1 fallback improved result:", fallbackStories.length, "stories");
+        mandatory = fallbackStories;
+      }
+    }
 
     // Call 2: Remaining 5 from other industries
     const coveredTags = mandatory.map((s: any) => s.tag).filter(Boolean).join(", ");

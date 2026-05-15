@@ -112,7 +112,7 @@ function parseStories(rawText: string, label: string): any[] | null {
 
 // ── Agentic search loop ──────────────────────────────────────────────────────
 
-async function runSearchLoop(systemPrompt: string, userPrompt: string, maxTokens: number): Promise<string> {
+async function runSearchLoop(systemPrompt: string, userPrompt: string, maxTokens: number, maxIterations = 5): Promise<string> {
   const messages: Anthropic.MessageParam[] = [{ role: "user", content: userPrompt }];
 
   let response = await client.messages.create({
@@ -124,7 +124,7 @@ async function runSearchLoop(systemPrompt: string, userPrompt: string, maxTokens
   });
 
   let iterations = 0;
-  while (response.stop_reason === "tool_use" && iterations++ < 15) {
+  while (response.stop_reason === "tool_use" && iterations++ < maxIterations) {
     const assistantContent = response.content;
     messages.push({ role: "assistant", content: assistantContent });
 
@@ -183,10 +183,10 @@ async function fetchMandatoryStory(
     .filter(s => industry.match(s.tag))
     .slice(-10);
 
-  const userPrompt = `Search for a recent AI news story about ${industry.label}. Focus on ${today} or ${yesterday}.`;
+  const userPrompt = `Search for a recent AI news story about ${industry.label}. Focus on ${today} or ${yesterday}. Be efficient — perform one targeted search, then return your result immediately. Do not perform more than 3 searches total.`;
 
   console.log(`[top10] [${industry.label}] Starting search`);
-  const raw = await runSearchLoop(mandatorySystemPrompt(industry, today, yesterday, industryPast), userPrompt, 400);
+  const raw = await runSearchLoop(mandatorySystemPrompt(industry, today, yesterday, industryPast), userPrompt, 400, 3);
   const story = parseSingleStory(raw, `[${industry.label}]`);
 
   if (story?.headline && story?.url) {
@@ -196,7 +196,7 @@ async function fetchMandatoryStory(
 
   // Retry without exclusions
   console.log(`[top10] [${industry.label}] Failed, retrying without exclusions`);
-  const rawFallback = await runSearchLoop(mandatorySystemPrompt(industry, today, yesterday, []), userPrompt, 400);
+  const rawFallback = await runSearchLoop(mandatorySystemPrompt(industry, today, yesterday, []), userPrompt, 400, 3);
   const fallback = parseSingleStory(rawFallback, `[${industry.label}] fallback`);
 
   if (fallback?.headline && fallback?.url) {
@@ -285,7 +285,7 @@ ${top20RecentUrls}
 Return a valid JSON array of exactly 5 stories:
 [{"headline":"max 12 words","source":"Publication Name","tag":"industry name","summary":"2-3 sentences for a non-technical reader","url":"article URL"}]`;
 
-    const remainingUserPrompt = `Find 5 AI news stories from 5 different industries. Do not use these already-covered industries: ${coveredTags}. Run a separate search for each industry.`;
+    const remainingUserPrompt = `Find 5 AI news stories from 5 different industries. Do not use these already-covered industries: ${coveredTags}. Be efficient — perform one targeted search per industry, then return your results immediately. Do not perform more than 5 searches total.`;
     const raw2 = await runSearchLoop(remainingSystemPrompt, remainingUserPrompt, 2000);
     const remaining = parseStories(raw2, "remaining 5");
     if (!remaining) {

@@ -91,27 +91,26 @@ export async function GET(request: NextRequest) {
   console.log(`[digest:${slug}] Exclusions: ${usedUrls.size} URLs, ${usedHeadlines.length} headlines (3d)`);
 
   const systemPrompt = buildSystemPrompt(industry.name, industry.focus, usedUrls, usedHeadlines);
-  const systemParam = [{ type: "text" as const, text: systemPrompt, cache_control: { type: "ephemeral" as const } }];
 
   try {
     const messages: Anthropic.MessageParam[] = [
       {
         role: "user",
-        content: `Search the web and find the 5 most important and genuinely interesting AI news stories from the past 7 days relevant to the ${industry.name} industry. Use multiple searches to cover different angles. Return only the JSON object.`,
+        content: `Search the web and find the 5 most important and genuinely interesting AI news stories from the past 7 days relevant to the ${industry.name} industry. Be efficient — perform one targeted search per story needed, then return your results immediately. Do not perform more than 5 searches total. Return only the JSON object.`,
       },
     ];
 
     let response = await client.messages.create({
       model: "claude-sonnet-4-6",
       max_tokens: 2000,
-      system: systemParam,
+      system: systemPrompt,
       tools: [WEB_SEARCH_TOOL],
       messages,
     });
 
-    // Agentic search loop (capped at 15 iterations)
+    // Agentic search loop (capped at 5 iterations)
     let iterations = 0;
-    while (response.stop_reason === "tool_use" && iterations++ < 15) {
+    while (response.stop_reason === "tool_use" && iterations++ < 5) {
       const assistantContent = response.content;
       messages.push({ role: "assistant", content: assistantContent });
 
@@ -131,7 +130,7 @@ export async function GET(request: NextRequest) {
       response = await client.messages.create({
         model: "claude-sonnet-4-6",
         max_tokens: 2000,
-        system: systemParam,
+        system: systemPrompt,
         tools: [WEB_SEARCH_TOOL],
         messages,
       });

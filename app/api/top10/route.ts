@@ -69,7 +69,7 @@ function extractJsonArray(text: string): string | null {
   return null;
 }
 
-function buildSystemPrompt(industries: IndustryRow[], usedUrls: Set<string>): string {
+function buildSystemPrompt(industries: IndustryRow[], usedUrls: Set<string>, usedHeadlines: string[]): string {
   const now = new Date();
   const today = now.toISOString().split("T")[0];
   const yesterdayDate = new Date(now);
@@ -110,7 +110,17 @@ TODAY'S DATE: ${today}
 ACCEPTABLE PUBLICATION DATES: ${yesterday} or ${today} only.
 Before including any story, check its publication date. If it was published before ${yesterday}, do not include it — keep searching until you find a more recent story. The only exception is mandatory industries (Step 1) where nothing recent exists; in that case you may go back up to 7 days, but you must add "(this week)" to the end of the headline.
 
-${usedUrls.size > 0 ? `PREVIOUSLY USED URLS — do not include any of these in your response, find different stories instead:\n${Array.from(usedUrls).join("\n")}\n\n` : ""}STEP 1 — MANDATORY INDUSTRIES (fill these first, in order):
+${(usedHeadlines.length > 0 || usedUrls.size > 0) ? `PREVIOUSLY COVERED STORIES — do not cover any of these events or announcements again, even if you find them on a different website or source:
+
+Headlines already covered:
+${usedHeadlines.join("\n")}
+
+URLs already used:
+${Array.from(usedUrls).join("\n")}
+
+If a story you find is clearly about the same event as one already covered above — even if it is from a different publication or has a different URL — skip it and find a genuinely different story instead.
+
+` : ""}STEP 1 — MANDATORY INDUSTRIES (fill these first, in order):
 You MUST find exactly one story for each of the 5 industries below before doing anything else. Search specifically for each one. Do not move to the next until you have found a qualifying story published on ${today} or ${yesterday}.
 
 ${mandatoryLines.join("\n\n")}
@@ -129,7 +139,8 @@ Before returning your answer, verify each item:
 □ No two stories cover the same event or announcement
 □ Every story URL is freely accessible (no paywalls)
 □ Every story was published on ${today} or ${yesterday} — any older story must be excluded unless it is a mandatory industry fallback, in which case the headline ends with "(this week)"
-□ No URL in your response matches any URL in the PREVIOUSLY USED URLS list above
+□ No story covers an event or announcement that matches or closely resembles any headline in the PREVIOUSLY COVERED STORIES list
+□ No URL in your response matches any URL in the PREVIOUSLY COVERED STORIES list
 □ Total stories = exactly 10
 
 If any check fails, fix it before responding. Do not return the JSON until all checks pass.
@@ -166,17 +177,19 @@ export async function GET() {
   ]);
 
   const usedUrls = new Set<string>();
+  const usedHeadlines: string[] = [];
   for (const row of pastRuns ?? []) {
     if (Array.isArray(row.stories)) {
       for (const story of row.stories) {
         if (story?.url) usedUrls.add(story.url);
+        if (story?.headline) usedHeadlines.push(story.headline);
       }
     }
   }
-  console.log("[top10] Loaded", usedUrls.size, "previously used URLs from past 7 days");
+  console.log("[top10] Loaded", usedUrls.size, "previously used URLs and", usedHeadlines.length, "headlines from past 7 days");
 
   const userPrompt = config?.prompt || DEFAULT_PROMPT;
-  const systemPrompt = buildSystemPrompt((industries as IndustryRow[]) || [], usedUrls);
+  const systemPrompt = buildSystemPrompt((industries as IndustryRow[]) || [], usedUrls, usedHeadlines);
 
   console.log("[top10] Building prompt with", industries?.length ?? 0, "industries");
 

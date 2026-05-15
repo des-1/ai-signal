@@ -8,43 +8,33 @@ export const maxDuration = 300;
 const WEB_SEARCH_TOOL = { type: "web_search_20250305", name: "web_search" } as any;
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-const DEFAULT_PROMPT =
-  "Search for AI news stories published in the past 24-48 hours. Work through each mandatory industry one by one. For each one, run a targeted search before moving to the next.";
-
 type IndustryRow = { name: string; slug: string; focus: string };
 
-const MANDATORY_DEFS = [
+const MANDATORY_INDUSTRIES = [
   {
     label: "Finance & Banking",
     match: (n: string) => /finance|bank/i.test(n),
-    qualifies:
-      "banks, fintech companies, trading platforms, wealth management, insurance, payment providers, financial regulators, investment banks",
-    doesNotQualify:
-      "a story about another industry that happens to mention funding or investment",
+    scope: "banks, fintech, trading platforms, wealth management, insurance, payment providers — not just any story mentioning funding",
   },
   {
     label: "Law & Legal",
     match: (n: string) => /law|legal/i.test(n),
-    qualifies:
-      "law firms, courts, legal technology, regulation affecting the legal profession, bar associations, in-house legal teams",
+    scope: "law firms, courts, legal technology, regulation affecting the legal profession, bar associations",
   },
   {
     label: "Healthcare & Pharmaceutical",
     match: (n: string) => /health|pharma|medical/i.test(n),
-    qualifies:
-      "hospitals, clinical trials, medical devices, patient care, pharmaceutical companies, health insurers, medical regulators like FDA or MHRA",
+    scope: "hospitals, clinical trials, medical devices, patient care, pharmaceutical companies, health insurers, FDA/MHRA",
   },
   {
     label: "Media & Marketing",
     match: (n: string) => /media|market|advertis/i.test(n),
-    qualifies:
-      "advertising platforms, agencies, brands, content creation, social media platforms in an advertising context, publishers",
+    scope: "advertising platforms, agencies, brands, content creation, social media in an advertising context, publishers",
   },
   {
     label: "Defense & Security",
     match: (n: string) => /defense|defence|security|military/i.test(n),
-    qualifies:
-      "military, defence contractors, national security agencies, cybersecurity companies, intelligence services",
+    scope: "military, defence contractors, national security agencies, cybersecurity companies, intelligence services",
   },
 ];
 
@@ -69,99 +59,85 @@ function extractJsonArray(text: string): string | null {
   return null;
 }
 
-function buildSystemPrompt(industries: IndustryRow[], usedUrls: Set<string>, usedHeadlines: string[]): string {
-  const now = new Date();
-  const today = now.toISOString().split("T")[0];
-  const yesterdayDate = new Date(now);
-  yesterdayDate.setDate(yesterdayDate.getDate() - 1);
-  const yesterday = yesterdayDate.toISOString().split("T")[0];
-
-  const mandatoryLines = MANDATORY_DEFS.map((def, i) => {
-    const match = industries.find((ind) => def.match(ind.name));
-    const focusLine = match?.focus
-      ? `   Focus areas from RepresentAI: ${match.focus}`
-      : "";
-    const dontLine = def.doesNotQualify
-      ? `   Does NOT qualify: ${def.doesNotQualify}`
-      : "";
-    return [
-      `${i + 1}. ${def.label}`,
-      `   Qualifies: ${def.qualifies}.`,
-      focusLine,
-      dontLine,
-    ]
-      .filter(Boolean)
-      .join("\n");
-  });
-
-  const mandatorySlugs = new Set(
-    MANDATORY_DEFS.map((def) => industries.find((ind) => def.match(ind.name))?.slug).filter(Boolean)
-  );
-
-  const remainingIndustries = industries.filter((ind) => !mandatorySlugs.has(ind.slug));
-
-  const remainingLines = remainingIndustries
-    .map((ind) => `- ${ind.name}: ${ind.focus}`)
-    .join("\n");
-
-  return `You are a strict AI news curator for RepresentAI, a UK organisation focused on AI literacy for business professionals. Your job is to find and return exactly 10 AI news stories.
-
-TODAY'S DATE: ${today}
-ACCEPTABLE PUBLICATION DATES: ${yesterday} or ${today} only.
-Before including any story, check its publication date. If it was published before ${yesterday}, do not include it — keep searching until you find a more recent story. The only exception is mandatory industries (Step 1) where nothing recent exists; in that case you may go back up to 7 days, but you must add "(this week)" to the end of the headline.
-
-${(usedHeadlines.length > 0 || usedUrls.size > 0) ? `PREVIOUSLY COVERED STORIES — do not cover any of these events or announcements again, even if you find them on a different website or source:
-
-Headlines already covered:
-${usedHeadlines.join("\n")}
-
-URLs already used:
+function buildSystemPrompt(today: string, yesterday: string, usedUrls: Set<string>, usedHeadlines: string[]): string {
+  const exclusions = (usedUrls.size > 0 || usedHeadlines.length > 0)
+    ? `Previously covered stories — skip any event matching these, even from a different source:
+Headlines: ${usedHeadlines.join(" | ")}
+URLs:
 ${Array.from(usedUrls).join("\n")}
 
-If a story you find is clearly about the same event as one already covered above — even if it is from a different publication or has a different URL — skip it and find a genuinely different story instead.
+`
+    : "";
 
-` : ""}STEP 1 — MANDATORY INDUSTRIES (fill these first, in order):
-You MUST find exactly one story for each of the 5 industries below before doing anything else. Search specifically for each one. Do not move to the next until you have found a qualifying story published on ${today} or ${yesterday}.
+  return `You are an AI news curator for RepresentAI, finding recent AI news for UK business professionals.
 
-${mandatoryLines.join("\n\n")}
+Prioritise stories from ${today} and ${yesterday}. If nothing recent exists for an industry, use the most recent story available from the past 7 days.
+Sources: TechCrunch, Reuters, BBC, Forbes, The Guardian, Wired, The Verge, VentureBeat, MIT Technology Review, Fast Company, AP News, company blogs. No paywalls. Never use PR Newswire, Business Wire, or GlobeNewswire.
 
-STEP 2 — REMAINING 5 STORIES:
-Fill the remaining 5 slots with the best AI stories from the industries listed below. Each story must come from a DIFFERENT industry. Do not repeat any industry already used in Step 1.
+${exclusions}Return ONLY a valid JSON array — no markdown, no preamble, no backticks:
+[{"headline":"max 12 words","source":"Publication Name","tag":"industry name","summary":"2-3 sentences for a non-technical reader","url":"article URL"}]`;
+}
 
-Available industries and focus areas:
-${remainingLines || "Energy, Construction, Logistics, Education, Engineering, Manufacturing, Retail, Technology — pick the best 5 stories from distinct industries."}
+async function runSearchLoop(systemPrompt: string, userPrompt: string): Promise<string> {
+  const messages: Anthropic.MessageParam[] = [{ role: "user", content: userPrompt }];
 
-STEP 3 — SELF-CHECK (mandatory before responding):
-Before returning your answer, verify each item:
-□ Exactly 5 mandatory industries covered, one story each
-□ Exactly 5 additional stories from 5 different industries
-□ No industry appears more than once across all 10 stories
-□ No two stories cover the same event or announcement
-□ Every story URL is freely accessible (no paywalls)
-□ Every story was published on ${today} or ${yesterday} — any older story must be excluded unless it is a mandatory industry fallback, in which case the headline ends with "(this week)"
-□ No story covers an event or announcement that matches or closely resembles any headline in the PREVIOUSLY COVERED STORIES list
-□ No URL in your response matches any URL in the PREVIOUSLY COVERED STORIES list
-□ Total stories = exactly 10
+  let response = await client.messages.create({
+    model: "claude-sonnet-4-6",
+    max_tokens: 4000,
+    system: systemPrompt,
+    tools: [WEB_SEARCH_TOOL],
+    messages,
+  });
 
-If any check fails, fix it before responding. Do not return the JSON until all checks pass.
+  let iterations = 0;
+  while (response.stop_reason === "tool_use" && iterations++ < 15) {
+    const assistantContent = response.content;
+    messages.push({ role: "assistant", content: assistantContent });
 
-SOURCE RULES:
-- Only freely accessible sources: TechCrunch, Reuters, BBC, Forbes, The Guardian, Wired, The Verge, VentureBeat, MIT Technology Review, Fast Company, AP News, Gov.uk, official company blogs and press releases
-- Never use: Wall Street Journal, New York Times, The Economist, or any source requiring login or subscription
-- Never use: PR Newswire, Business Wire, GlobeNewswire
-- Prefer original reporting over aggregators
+    const toolResults: Anthropic.ToolResultBlockParam[] = assistantContent
+      .filter((b): b is Anthropic.ToolUseBlock => b.type === "tool_use")
+      .map((toolUse) => ({
+        type: "tool_result" as const,
+        tool_use_id: toolUse.id,
+        content: JSON.stringify({
+          status: "search_executed",
+          query: (toolUse.input as { query: string }).query,
+        }),
+      }));
 
-OUTPUT FORMAT:
-Return only a valid JSON array. No preamble, no markdown, no backticks, no ellipsis placeholders (do not use ... anywhere in the JSON).
-[
-  {
-    "headline": "max 12 words, sharp and editorial",
-    "source": "Publication Name",
-    "tag": "exact industry name matching one of the industries listed above",
-    "summary": "2-3 sentences — what happened and why it matters for business professionals. Include enough context for a non-technical reader.",
-    "url": "actual article URL"
+    messages.push({ role: "user", content: toolResults });
+
+    response = await client.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 4000,
+      system: systemPrompt,
+      tools: [WEB_SEARCH_TOOL],
+      messages,
+    });
   }
-]`;
+
+  return response.content
+    .filter((b): b is Anthropic.TextBlock => b.type === "text")
+    .map((b) => b.text)
+    .join("");
+}
+
+function parseStories(rawText: string, label: string): any[] | null {
+  const cleaned = rawText.replace(/```[a-z]*\n?/g, "").replace(/```/g, "").trim();
+  const jsonStr = extractJsonArray(cleaned);
+  if (!jsonStr) {
+    console.error(`[top10] ${label}: no JSON array found. Raw:`, rawText.slice(0, 500));
+    return null;
+  }
+  const sanitised = jsonStr
+    .replace(/,\s*\.\.\.\s*(?=[,\]])/g, "")
+    .replace(/\[\s*\.\.\.\s*,\s*/g, "[");
+  try {
+    return JSON.parse(sanitised);
+  } catch (e) {
+    console.error(`[top10] ${label}: JSON.parse failed:`, sanitised.slice(0, 500));
+    return null;
+  }
 }
 
 export async function GET() {
@@ -170,8 +146,7 @@ export async function GET() {
   const sevenDaysAgo = new Date();
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-  const [{ data: config }, { data: industries }, { data: pastRuns }] = await Promise.all([
-    db.from("top10_config").select("prompt").eq("id", 1).maybeSingle(),
+  const [{ data: industries }, { data: pastRuns }] = await Promise.all([
     db.from("industries").select("name, slug, focus").eq("active", true).order("created_at", { ascending: true }),
     db.from("top10").select("stories").gte("created_at", sevenDaysAgo.toISOString()),
   ]);
@@ -186,110 +161,60 @@ export async function GET() {
       }
     }
   }
-  console.log("[top10] Loaded", usedUrls.size, "previously used URLs and", usedHeadlines.length, "headlines from past 7 days");
+  console.log("[top10] Exclusions:", usedUrls.size, "URLs,", usedHeadlines.length, "headlines");
 
-  const userPrompt = config?.prompt || DEFAULT_PROMPT;
-  const systemPrompt = buildSystemPrompt((industries as IndustryRow[]) || [], usedUrls, usedHeadlines);
+  const now = new Date();
+  const today = now.toISOString().split("T")[0];
+  const yesterdayDate = new Date(now);
+  yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+  const yesterday = yesterdayDate.toISOString().split("T")[0];
 
-  console.log("[top10] Building prompt with", industries?.length ?? 0, "industries");
+  const allIndustries = (industries as IndustryRow[]) || [];
+  const mandatorySlugs = new Set(
+    MANDATORY_INDUSTRIES.map(def => allIndustries.find(ind => def.match(ind.name))?.slug).filter(Boolean)
+  );
+  const remainingIndustries = allIndustries.filter(ind => !mandatorySlugs.has(ind.slug));
+
+  const systemPrompt = buildSystemPrompt(today, yesterday, usedUrls, usedHeadlines);
 
   try {
-    const messages: Anthropic.MessageParam[] = [
-      { role: "user", content: userPrompt },
-    ];
+    // Call 1: Mandatory 5 industries
+    const mandatoryList = MANDATORY_INDUSTRIES
+      .map(ind => `- ${ind.label}: ${ind.scope}`)
+      .join("\n");
+    const call1Prompt = `Find one AI news story for each of these 5 industries. Run a separate web search for each before moving to the next. Return a JSON array of exactly 5 stories.\n\n${mandatoryList}`;
 
-    let response = await client.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 8192,
-      system: systemPrompt,
-      tools: [WEB_SEARCH_TOOL],
-      messages,
-    });
-
-    const MAX_ITERATIONS = 25;
-    let iterations = 0;
-    while (response.stop_reason === "tool_use" && iterations < MAX_ITERATIONS) {
-      iterations++;
-      const assistantContent = response.content;
-      messages.push({ role: "assistant", content: assistantContent });
-
-      const toolResults: Anthropic.ToolResultBlockParam[] = assistantContent
-        .filter((b): b is Anthropic.ToolUseBlock => b.type === "tool_use")
-        .map((toolUse) => ({
-          type: "tool_result" as const,
-          tool_use_id: toolUse.id,
-          content: JSON.stringify({
-            status: "search_executed",
-            query: (toolUse.input as { query: string }).query,
-          }),
-        }));
-
-      messages.push({ role: "user", content: toolResults });
-
-      response = await client.messages.create({
-        model: "claude-sonnet-4-6",
-        max_tokens: 8192,
-        system: systemPrompt,
-        tools: [WEB_SEARCH_TOOL],
-        messages,
-      });
+    console.log("[top10] Call 1: mandatory 5");
+    const raw1 = await runSearchLoop(systemPrompt, call1Prompt);
+    const mandatory = parseStories(raw1, "Call 1");
+    if (!mandatory) {
+      return NextResponse.json({ error: "Could not parse mandatory stories", raw: raw1 }, { status: 500 });
     }
+    console.log("[top10] Call 1:", mandatory.length, "stories:", mandatory.map((s: any) => s.headline));
 
-    // If still in tool_use after hitting the limit, force a text response
-    if (response.stop_reason === "tool_use") {
-      console.warn("[top10] Hit iteration limit, forcing final JSON output");
-      const assistantContent = response.content;
-      messages.push({ role: "assistant", content: assistantContent });
-      const toolResults: Anthropic.ToolResultBlockParam[] = assistantContent
-        .filter((b): b is Anthropic.ToolUseBlock => b.type === "tool_use")
-        .map((toolUse) => ({
-          type: "tool_result" as const,
-          tool_use_id: toolUse.id,
-          content: JSON.stringify({ status: "search_executed", query: (toolUse.input as { query: string }).query }),
-        }));
-      messages.push({ role: "user", content: toolResults });
-      messages.push({ role: "user", content: "You have done enough research. Stop searching and output your final JSON array now based on the stories you have found." });
-      response = await client.messages.create({
-        model: "claude-sonnet-4-6",
-        max_tokens: 8192,
-        system: systemPrompt,
-        tools: [WEB_SEARCH_TOOL],
-        tool_choice: { type: "auto" },
-        messages,
-      });
+    // Call 2: Remaining 5 from other industries
+    const coveredTags = mandatory.map((s: any) => s.tag).filter(Boolean).join(", ");
+    const industryList = remainingIndustries.length > 0
+      ? remainingIndustries.map(ind => `- ${ind.name}${ind.focus ? `: ${ind.focus}` : ""}`).join("\n")
+      : "- Energy\n- Construction\n- Logistics\n- Education\n- Engineering\n- Manufacturing\n- Retail\n- Technology";
+    const call2Prompt = `These 5 stories have already been found:\n${JSON.stringify(mandatory.map((s: any) => ({ headline: s.headline, tag: s.tag })))}\n\nFind 5 more AI news stories, one each from 5 DIFFERENT industries in the list below. Do not repeat the already-covered industries (${coveredTags}). Return a JSON array of exactly 5 stories.\n\n${industryList}`;
+
+    console.log("[top10] Call 2: remaining 5, excluding:", coveredTags);
+    const raw2 = await runSearchLoop(systemPrompt, call2Prompt);
+    const remaining = parseStories(raw2, "Call 2");
+    if (!remaining) {
+      return NextResponse.json({ error: "Could not parse remaining stories", raw: raw2 }, { status: 500 });
     }
+    console.log("[top10] Call 2:", remaining.length, "stories:", remaining.map((s: any) => s.headline));
 
-    const rawText = response.content
-      .filter((b): b is Anthropic.TextBlock => b.type === "text")
-      .map((b) => b.text)
-      .join("");
-
-    const cleaned = rawText.replace(/```[a-z]*\n?/g, "").replace(/```/g, "").trim();
-    const jsonStr = extractJsonArray(cleaned);
-    if (!jsonStr) {
-      console.error("[top10] Could not find JSON array. Raw text:", rawText);
-      return NextResponse.json({ error: "Could not parse stories", raw: rawText }, { status: 500 });
-    }
-
-    // Strip ellipsis placeholders Claude sometimes inserts (e.g. [..., ..., {real}] or field: "...")
-    const sanitised = jsonStr
-      .replace(/,\s*\.\.\.\s*(?=[,\]])/g, "")  // trailing ellipsis entries: , ...
-      .replace(/\[\s*\.\.\.\s*,\s*/g, "[");      // leading ellipsis entries: [... ,
-
-    let stories: any[];
-    try {
-      stories = JSON.parse(sanitised);
-    } catch (parseErr) {
-      console.error("[top10] JSON.parse failed. Extracted:", sanitised.slice(0, 800));
-      return NextResponse.json({ error: `JSON parse error: ${(parseErr as Error).message}`, raw: rawText }, { status: 500 });
-    }
-    console.log("[top10] Parsed", stories.length, "stories:", stories.map((s: any) => s.headline));
-
+    // Merge and dedup by URL
+    let stories = [...mandatory, ...remaining];
     const beforeDedup = stories.length;
     stories = stories.filter((s: any) => !usedUrls.has(s?.url));
     if (stories.length < beforeDedup) {
-      console.warn(`[top10] Dedup: filtered out ${beforeDedup - stories.length} story/stories whose URL(s) appeared in the past 7 days`);
+      console.warn(`[top10] Dedup: filtered ${beforeDedup - stories.length} duplicate URL(s)`);
     }
+    console.log("[top10] Final:", stories.length, "stories");
 
     const { data: saved, error: insertError } = await db
       .from("top10")
@@ -302,8 +227,7 @@ export async function GET() {
       return NextResponse.json({ error: `DB insert failed: ${insertError.message}` }, { status: 500 });
     }
 
-    console.log("[top10] Saved to DB with id:", saved?.id);
-
+    console.log("[top10] Saved id:", saved?.id);
     return NextResponse.json({
       id: saved?.id,
       stories,

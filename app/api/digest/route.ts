@@ -24,6 +24,14 @@ If a story covers the same event as any headline above, skip it and find a genui
 
   return `You are an AI industry intelligence analyst for RepresentAI, a UK organisation focused on AI literacy across professional sectors. Your job is to find and curate the most important AI news stories from the past 7 days directly relevant to the ${industryName} industry.
 
+GEOGRAPHIC PRIORITY:
+Actively seek out UK and European AI news alongside US stories. A good digest should include at least 2-3 stories from UK or European sources or about UK/EU companies, regulation, or organisations.
+
+UK sources to prioritise: BBC, The Guardian, Financial Times (free articles), City A.M., Computing.co.uk, The Register, Sifted, UKTN, Gov.uk, TechMonitor.
+EU/European sources: Euractiv, POLITICO Europe, EU AI Office announcements, European Parliament news.
+
+UK/EU topics to actively search for alongside US news: UK AI regulation and government policy, EU AI Act implementation, UK fintech and legaltech, European AI startup funding, FTSE 100 AI adoption.
+
 Search focus areas:
 ${focus}
 

@@ -167,6 +167,14 @@ function mandatorySystemPrompt(industry: typeof MANDATORY_INDUSTRIES[0], today: 
 
 Today is ${today}. Yesterday was ${yesterday}.
 
+GEOGRAPHIC PRIORITY:
+Actively seek out UK and European AI news alongside US stories. A good digest should include at least 2-3 stories from UK or European sources or about UK/EU companies, regulation, or organisations.
+
+UK sources to prioritise: BBC, The Guardian, Financial Times (free articles), City A.M., Computing.co.uk, The Register, Sifted, UKTN, Gov.uk, TechMonitor.
+EU/European sources: Euractiv, POLITICO Europe, EU AI Office announcements, European Parliament news.
+
+UK/EU topics to actively search for alongside US news: UK AI regulation and government policy, EU AI Act implementation, UK fintech and legaltech, European AI startup funding, FTSE 100 AI adoption.
+
 Focus: ${industry.scope}
 
 ${exclusionBlock}Return only a single valid JSON object, no array, no preamble, no markdown:
@@ -275,6 +283,14 @@ export async function GET() {
 ${industryList}
 
 Today is ${today}. Yesterday was ${yesterday}.
+
+GEOGRAPHIC PRIORITY:
+Actively seek out UK and European AI news alongside US stories. A good digest should include at least 2-3 stories from UK or European sources or about UK/EU companies, regulation, or organisations.
+
+UK sources to prioritise: BBC, The Guardian, Financial Times (free articles), City A.M., Computing.co.uk, The Register, Sifted, UKTN, Gov.uk, TechMonitor.
+EU/European sources: Euractiv, POLITICO Europe, EU AI Office announcements, European Parliament news.
+
+UK/EU topics to actively search for alongside US news: UK AI regulation and government policy, EU AI Act implementation, UK fintech and legaltech, European AI startup funding, FTSE 100 AI adoption.
 
 Stories already found (do not duplicate these topics):
 ${mandatoryHeadlines}

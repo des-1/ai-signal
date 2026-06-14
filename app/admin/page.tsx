@@ -88,7 +88,7 @@ function IconPicker({ value, onChange }: { value: string; onChange: (id: string)
   );
 }
 
-const DEFAULT_TOP10_PROMPT = "Find the 10 most important AI stories from the past 24 hours that are directly relevant to business professionals and decision-makers across industries including law, finance, healthcare, media, marketing, energy, construction, logistics, education, defense, engineering, manufacturing and retail. Focus on AI adoption by businesses and organisations, regulatory changes affecting industries, AI tools changing professional workflows, and major funding or partnerships. Avoid academic research, developer tools, and generic AI model benchmarks unless they have clear business implications.";
+const DEFAULT_TOP10_PROMPT = "Find the 10 most important AI stories from the past 24 hours that are directly relevant to business professionals and decision-makers. Coverage must include guaranteed slots for: Finance & Banking, Law & Legal, Healthcare & Pharmaceutical, Media & Marketing, Defense & Security, and Technology & AI (major announcements from Anthropic, OpenAI, Google DeepMind, or Meta AI — new models, product launches, pricing changes, or policy moves with clear business impact). Remaining slots should cover other industries including energy, construction, logistics, education, engineering, manufacturing and retail. Focus on AI adoption by businesses and organisations, regulatory changes affecting industries, AI tools changing professional workflows, and major funding or partnerships. Avoid academic research, developer tools, and generic AI model benchmarks unless they have clear business implications.";
 
 const btn = (extra: React.CSSProperties = {}): React.CSSProperties => ({
   fontSize: 12, fontFamily: "monospace", cursor: "pointer",

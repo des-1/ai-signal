@@ -37,6 +37,11 @@ const MANDATORY_INDUSTRIES = [
     match: (n: string) => /defense|defence|security|military/i.test(n),
     scope: "military, defence contractors, national security agencies, cybersecurity companies, intelligence services",
   },
+  {
+    label: "Technology & AI",
+    match: (n: string) => /tech|ai$|artificial/i.test(n),
+    scope: "major AI company announcements from Anthropic, OpenAI, Google DeepMind, and Meta AI — new model releases, product launches, pricing changes, API updates, safety policy moves, or partnerships with clear business impact. Do NOT cover abstract research papers or benchmarks unless they announce a product or pricing change.",
+  },
 ];
 
 // ── JSON extraction helpers ──────────────────────────────────────────────────
@@ -281,6 +286,8 @@ export async function GET() {
 
     const remainingSystemPrompt = `You are an AI news researcher. Find 5 important AI news stories from the past 48 hours, each from a DIFFERENT industry from this list:
 ${industryList}
+
+EXCEPTION — Major AI company announcements: Even if not listed above, always include a story from Anthropic, OpenAI, Google DeepMind, or Meta AI if they made a major announcement in the past 48 hours (new model, product launch, pricing change, significant policy move) with clear business or industry impact. This takes priority over filling a slot from the industry list.
 
 Today is ${today}. Yesterday was ${yesterday}.
 

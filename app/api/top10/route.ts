@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
+import { publishToWordPress, formatTop10AsHtml, todayLabel, TOP10_WP_CATEGORY } from "@/lib/wordpress";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -336,11 +337,20 @@ Return a valid JSON array of exactly 5 stories:
     }
 
     console.log("[top10] Saved id:", saved?.id);
+
+    // Publish to WordPress
+    const wpResult = await publishToWordPress({
+      title: `Top 10 AI Stories Today — ${todayLabel()}`,
+      content: formatTop10AsHtml(stories),
+      categoryId: TOP10_WP_CATEGORY,
+    });
+
     return NextResponse.json({
       id: saved?.id,
       stories,
       storyCount: stories.length,
       generatedAt: new Date().toISOString(),
+      wordpress: wpResult,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";

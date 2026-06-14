@@ -1,11 +1,25 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
+import {
+  publishToWordPress,
+  formatDigestAsHtml,
+  todayLabel,
+  DIGEST_WP_CATEGORIES,
+  type WpPublishResult,
+} from "@/lib/wordpress";
 
 export const dynamic = "force-dynamic";
 
 const WEB_SEARCH_TOOL = { type: "web_search_20250305", name: "web_search" } as any;
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+const DIGEST_WP_TITLES: Record<string, string> = {
+  "media-marketing": "AI in Media & Marketing: Today's Top Stories",
+  "law-legal":       "AI in Law & Legal: Today's Top Stories",
+  "finance":         "AI in Finance: Today's Top Stories",
+  "defense-security":"AI in Defense & Security: Today's Top Stories",
+};
 
 function buildSystemPrompt(industryName: string, focus: string, usedUrls: Set<string>, usedHeadlines: string[]) {
   const exclusionBlock = (usedUrls.size > 0 || usedHeadlines.length > 0)
@@ -60,78 +74,6 @@ Source rules — critical:
 - Prefer original reporting over aggregators
 
 Return exactly 5 stories. Cover a mix of tags.`;
-}
-
-function formatDigestAsHtml(stories: any[], tldr: string, highlight: string): string {
-  const storiesHtml = stories
-    .map(
-      (s) => `<div style="margin-bottom:24px;">
-<h3><a href="${s.url}" target="_blank" rel="noopener noreferrer">${s.headline}</a></h3>
-<p><strong>${s.source}</strong> &middot; <em>${s.tag}</em></p>
-<p>${s.summary}</p>
-</div>`
-    )
-    .join("\n");
-
-  return `<p><strong>${tldr}</strong></p>
-<p><em>Top story: ${highlight}</em></p>
-<hr />
-${storiesHtml}`;
-}
-
-async function publishToWordPress(digest: {
-  stories: any[];
-  tldr: string;
-  highlight: string;
-}): Promise<{ published: boolean; wpPostId?: number; wpError?: string }> {
-  const username = process.env.WORDPRESS_USERNAME;
-  const password = process.env.WORDPRESS_APP_PASSWORD;
-
-  if (!username || !password) {
-    console.warn("[digest:wp] WORDPRESS_USERNAME or WORDPRESS_APP_PASSWORD not set — skipping publish");
-    return { published: false, wpError: "WordPress credentials not configured" };
-  }
-
-  const today = new Date();
-  const day = String(today.getDate()).padStart(2, "0");
-  const month = today.toLocaleString("en-GB", { month: "long" });
-  const year = today.getFullYear();
-  const dateLabel = `${day} ${month} ${year}`;
-
-  const title = `AI in Media & Marketing: Today's Top Stories — ${dateLabel}`;
-  const content = formatDigestAsHtml(digest.stories, digest.tldr, digest.highlight);
-  const credentials = Buffer.from(`${username}:${password}`).toString("base64");
-
-  try {
-    const res = await fetch("https://representai.co.uk/wp-json/wp/v2/posts", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Basic ${credentials}`,
-      },
-      body: JSON.stringify({
-        title,
-        content,
-        status: "publish",
-        categories: [481],
-        author: 9,
-      }),
-    });
-
-    if (!res.ok) {
-      const text = await res.text();
-      console.error(`[digest:wp] Publish failed (${res.status}): ${text}`);
-      return { published: false, wpError: `HTTP ${res.status}: ${text.slice(0, 200)}` };
-    }
-
-    const data = await res.json();
-    console.log(`[digest:wp] Published post ID ${data.id}`);
-    return { published: true, wpPostId: data.id };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error(`[digest:wp] Publish error: ${message}`);
-    return { published: false, wpError: message };
-  }
 }
 
 export async function GET(request: NextRequest) {
@@ -242,10 +184,16 @@ export async function GET(request: NextRequest) {
       .select()
       .single();
 
-    // Publish to WordPress for media-marketing digest
-    let wpResult: { published: boolean; wpPostId?: number; wpError?: string } = { published: false };
-    if (slug === "media-marketing") {
-      wpResult = await publishToWordPress({ stories, tldr, highlight });
+    // Publish to WordPress if this slug has a mapped category
+    let wpResult: WpPublishResult = { published: false };
+    const categoryId = DIGEST_WP_CATEGORIES[slug];
+    const titleBase = DIGEST_WP_TITLES[slug];
+    if (categoryId && titleBase) {
+      wpResult = await publishToWordPress({
+        title: `${titleBase} — ${todayLabel()}`,
+        content: formatDigestAsHtml(stories, tldr, highlight),
+        categoryId,
+      });
     }
 
     return NextResponse.json({

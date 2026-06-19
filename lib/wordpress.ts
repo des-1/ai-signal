@@ -72,6 +72,7 @@ export function formatDigestAsHtml(stories: any[], tldr: string, highlight: stri
 <h3><a href="${s.url}" target="_blank" rel="noopener noreferrer">${s.headline}</a></h3>
 <p><strong>${s.source}</strong> &middot; <em>${s.tag}</em></p>
 <p>${s.summary}</p>
+<p><a href="${s.url}" target="_blank" rel="noopener noreferrer">Read the full article →</a></p>
 </div>`
     )
     .join("\n");
@@ -89,6 +90,7 @@ export function formatTop10AsHtml(stories: any[]): string {
 <h3>${i + 1}. <a href="${s.url}" target="_blank" rel="noopener noreferrer">${s.headline}</a></h3>
 <p><strong>${s.source}</strong> &middot; <em>${s.tag}</em></p>
 <p>${s.summary}</p>
+<p><a href="${s.url}" target="_blank" rel="noopener noreferrer">Read the full article →</a></p>
 </div>`
     )
     .join("\n");

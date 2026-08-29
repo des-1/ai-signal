@@ -40,10 +40,19 @@ function storyKey(s: Story) {
 
 function buildWhatsApp(digest: DigestRecord, industryName: string, selected: Set<string>): string {
   const date = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
-  const selectedStories = digest.stories?.filter(s => selected.has(storyKey(s))) ?? [];
+  const allStories = digest.stories ?? [];
+  const selectedStories = allStories.filter(s => selected.has(storyKey(s)));
+  const allSelected = selectedStories.length === allStories.length;
+
   let msg = `Daily AI News - RepresentAI | ${industryName}\n${date}\n\n`;
-  if (digest.highlight) msg += `⚡ *This week's highlight:* ${digest.highlight}\n\n`;
-  if (digest.tldr) msg += `${digest.tldr}\n\n`;
+
+  // Only include the AI-generated overview when all stories are selected —
+  // if the user has deselected any, the TL;DR may reference stories not in the message.
+  if (allSelected) {
+    if (digest.highlight) msg += `⚡ *This week's highlight:* ${digest.highlight}\n\n`;
+    if (digest.tldr) msg += `${digest.tldr}\n\n`;
+  }
+
   selectedStories.forEach((s: Story, i: number) => {
     const icon = TAG_ICONS[s.tag] || "📌";
     msg += `${icon} *${s.headline}*\n${s.summary}`;
@@ -269,6 +278,13 @@ export default function DigestPage({ params }: { params: { slug: string } }) {
                 <p style={{ margin: 0, fontSize: 13, color: "#444", fontFamily: "sans-serif", lineHeight: 1.65 }}>
                   {currentDigest.tldr}
                 </p>
+              </div>
+            )}
+
+            {/* Notice when TL;DR is omitted from the WhatsApp message */}
+            {selected.size > 0 && selected.size < totalStories && (
+              <div style={{ padding: "8px 12px", borderRadius: 6, background: "#fafaf9", border: "0.5px solid #e5e5e5", marginBottom: 16, fontFamily: "monospace", fontSize: 10, color: "#aaa" }}>
+                TL;DR and highlight omitted from WhatsApp — they cover all stories. Reselect all to include them.
               </div>
             )}
 

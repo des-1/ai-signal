@@ -200,7 +200,7 @@ async function fetchMandatoryStory(
   const userPrompt = `Search for a recent AI news story about ${industry.label}. Focus on ${today} or ${yesterday}. Be efficient — perform one targeted search, then return your result immediately. Do not perform more than 3 searches total.`;
 
   console.log(`[top10] [${industry.label}] Starting search`);
-  const raw = await runSearchLoop(mandatorySystemPrompt(industry, today, yesterday, industryPast), userPrompt, 400, 3);
+  const raw = await runSearchLoop(mandatorySystemPrompt(industry, today, yesterday, industryPast), userPrompt, 600, 3);
   const story = parseSingleStory(raw, `[${industry.label}]`);
 
   if (story?.headline && story?.url) {
@@ -210,7 +210,7 @@ async function fetchMandatoryStory(
 
   // Retry without exclusions
   console.log(`[top10] [${industry.label}] Failed, retrying without exclusions`);
-  const rawFallback = await runSearchLoop(mandatorySystemPrompt(industry, today, yesterday, []), userPrompt, 400, 3);
+  const rawFallback = await runSearchLoop(mandatorySystemPrompt(industry, today, yesterday, []), userPrompt, 600, 3);
   const fallback = parseSingleStory(rawFallback, `[${industry.label}] fallback`);
 
   if (fallback?.headline && fallback?.url) {

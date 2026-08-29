@@ -101,9 +101,11 @@ export function formatTop10AsHtml(stories: any[]): string {
 // Slug → WordPress category mapping for industry digests
 export const DIGEST_WP_CATEGORIES: Record<string, number> = {
   "media-marketing": 481,
-  "law-legal": 483,
+  "law": 483,
   "finance": 484,
   "defense-security": 485,
+  "supply-chain": 585,
+  "ai-cybersecurity": 586,
 };
 
 export const TOP10_WP_CATEGORY = 486;

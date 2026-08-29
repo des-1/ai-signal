@@ -15,10 +15,12 @@ const WEB_SEARCH_TOOL = { type: "web_search_20250305", name: "web_search" } as a
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 const DIGEST_WP_TITLES: Record<string, string> = {
-  "media-marketing": "AI in Media & Marketing: Today's Top Stories",
-  "law-legal":       "AI in Law & Legal: Today's Top Stories",
-  "finance":         "AI in Finance: Today's Top Stories",
-  "defense-security":"AI in Defense & Security: Today's Top Stories",
+  "media-marketing":  "AI in Media & Marketing: Today's Top Stories",
+  "law":              "AI in Law & Legal: Today's Top Stories",
+  "finance":          "AI in Finance: Today's Top Stories",
+  "defense-security": "AI in Defense & Security: Today's Top Stories",
+  "supply-chain":     "AI in Supply Chain: Today's Top Stories",
+  "ai-cybersecurity": "AI in Cybersecurity: Today's Top Stories",
 };
 
 function buildSystemPrompt(industryName: string, focus: string, usedUrls: Set<string>, usedHeadlines: string[]) {

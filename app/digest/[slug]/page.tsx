@@ -34,16 +34,21 @@ function timeAgo(date: string) {
   return `${days}d ago`;
 }
 
-function buildWhatsApp(digest: DigestRecord, industryName: string): string {
+function storyKey(s: Story) {
+  return s.url || s.headline;
+}
+
+function buildWhatsApp(digest: DigestRecord, industryName: string, selected: Set<string>): string {
   const date = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+  const selectedStories = digest.stories?.filter(s => selected.has(storyKey(s))) ?? [];
   let msg = `Daily AI News - RepresentAI | ${industryName}\n${date}\n\n`;
   if (digest.highlight) msg += `⚡ *This week's highlight:* ${digest.highlight}\n\n`;
   if (digest.tldr) msg += `${digest.tldr}\n\n`;
-  digest.stories?.forEach((s: Story, i: number) => {
+  selectedStories.forEach((s: Story, i: number) => {
     const icon = TAG_ICONS[s.tag] || "📌";
     msg += `${icon} *${s.headline}*\n${s.summary}`;
     if (s.url) msg += `\n\n${s.url}`;
-    if (i < digest.stories.length - 1) msg += "\n\n";
+    if (i < selectedStories.length - 1) msg += "\n\n";
   });
   msg += "\n\nDigest via RepresentAI / AI Signal";
   return msg;
@@ -58,6 +63,7 @@ export default function DigestPage({ params }: { params: { slug: string } }) {
   const [industryIcon, setIndustryIcon] = useState("📰");
   const [currentDigest, setCurrentDigest] = useState<DigestRecord | null>(null);
   const [archive, setArchive] = useState<DigestRecord[]>([]);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
   const [error, setError] = useState("");
@@ -75,7 +81,6 @@ export default function DigestPage({ params }: { params: { slug: string } }) {
   const loadFromDB = useCallback(async () => {
     setPageLoading(true);
 
-    // Fetch industry info
     const { data: ind } = await supabase
       .from("industries")
       .select("name, icon")
@@ -87,7 +92,6 @@ export default function DigestPage({ params }: { params: { slug: string } }) {
       setIndustryIcon(ind.icon);
     }
 
-    // Fetch digests (latest first)
     const { data: digests } = await supabase
       .from("digests")
       .select("*")
@@ -97,15 +101,19 @@ export default function DigestPage({ params }: { params: { slug: string } }) {
 
     if (digests && digests.length > 0) {
       setCurrentDigest(digests[0]);
+      setSelected(new Set(digests[0].stories?.map((s: Story) => storyKey(s)) ?? []));
       setArchive(digests.slice(1));
     }
 
     setPageLoading(false);
   }, [slug]);
 
-  useEffect(() => {
-    loadFromDB();
-  }, [loadFromDB]);
+  useEffect(() => { loadFromDB(); }, [loadFromDB]);
+
+  function switchDigest(d: DigestRecord) {
+    setCurrentDigest(d);
+    setSelected(new Set(d.stories?.map((s: Story) => storyKey(s)) ?? []));
+  }
 
   async function fetchDigest() {
     setLoading(true);
@@ -122,8 +130,6 @@ export default function DigestPage({ params }: { params: { slug: string } }) {
       const res = await fetch(`/api/digest?slug=${slug}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "API error");
-
-      // Reload from DB to get the saved record
       await loadFromDB();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong");
@@ -133,9 +139,17 @@ export default function DigestPage({ params }: { params: { slug: string } }) {
     }
   }
 
+  function toggleStory(key: string) {
+    setSelected(prev => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  }
+
   function copyToClipboard() {
     if (!currentDigest) return;
-    navigator.clipboard.writeText(buildWhatsApp(currentDigest, industryName)).then(() => {
+    navigator.clipboard.writeText(buildWhatsApp(currentDigest, industryName, selected)).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
     });
@@ -152,6 +166,9 @@ export default function DigestPage({ params }: { params: { slug: string } }) {
   const today = new Date().toLocaleDateString("en-GB", {
     weekday: "short", day: "numeric", month: "short", year: "numeric",
   });
+
+  const selectedStories = currentDigest?.stories?.filter(s => selected.has(storyKey(s))) ?? [];
+  const totalStories = currentDigest?.stories?.length ?? 0;
 
   if (pageLoading) {
     return (
@@ -195,7 +212,7 @@ export default function DigestPage({ params }: { params: { slug: string } }) {
           <div style={{ borderBottom: "0.5px solid #ddd", marginTop: 10 }} />
         </div>
 
-        {/* Generate button (no digest yet, or stale) */}
+        {/* Generate button */}
         {!loading && (!currentDigest || !isFresh) && (
           <button
             onClick={fetchDigest}
@@ -255,73 +272,134 @@ export default function DigestPage({ params }: { params: { slug: string } }) {
               </div>
             )}
 
-            {/* Stories */}
-            <div>
-              {currentDigest.stories?.map((s: Story, i: number) => (
-                <div key={i} style={{ padding: "1rem 0", borderBottom: i < currentDigest.stories.length - 1 ? "0.5px solid #e5e5e5" : "none" }}>
-                  <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 4 }}>
-                    <span style={{ fontFamily: "monospace", fontSize: 10, color: "#aaa", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                      {s.source}
-                    </span>
-                    <span style={{ fontFamily: "monospace", fontSize: 10, background: "#f5f5f4", color: "#666", padding: "2px 7px", borderRadius: 3 }}>
-                      {s.tag}
-                    </span>
-                  </div>
-                  {s.url ? (
-                    <a href={s.url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none" }}>
-                      <h2 style={{ margin: "0 0 6px", fontSize: 17, fontWeight: "normal", color: "#111", lineHeight: 1.3, cursor: "pointer" }}>
-                        {TAG_ICONS[s.tag] || "📌"} {s.headline} ↗
-                      </h2>
-                    </a>
-                  ) : (
-                    <h2 style={{ margin: "0 0 6px", fontSize: 17, fontWeight: "normal", color: "#111", lineHeight: 1.3 }}>
-                      {TAG_ICONS[s.tag] || "📌"} {s.headline}
-                    </h2>
-                  )}
-                  <p style={{ margin: 0, fontSize: 13, color: "#555", lineHeight: 1.65, fontFamily: "sans-serif" }}>{s.summary}</p>
-                  {s.url && (
-                    <p style={{ margin: "6px 0 0", fontSize: 11, fontFamily: "monospace", color: "#bbb", wordBreak: "break-all" }}>
-                      {s.url}
-                    </p>
-                  )}
-                </div>
-              ))}
-            </div>
-
-            {/* WhatsApp preview */}
-            <div style={{ marginTop: 28, padding: "1rem 1.25rem", background: "#f5f5f4", borderRadius: 10, border: "0.5px solid #e5e5e5" }}>
-              <p style={{ fontFamily: "monospace", fontSize: 10, color: "#aaa", textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 8px" }}>
-                WhatsApp preview
+            {/* Selection counter */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <p style={{ margin: 0, fontSize: 11, fontFamily: "monospace", color: "#aaa" }}>
+                {selected.size > 0
+                  ? `${selected.size} of ${totalStories} selected for WhatsApp`
+                  : "Tap stories to select them for the WhatsApp roundup"}
               </p>
-              <pre style={{ margin: 0, fontSize: 11, color: "#666", fontFamily: "monospace", whiteSpace: "pre-wrap", lineHeight: 1.65, maxHeight: 220, overflowY: "auto" }}>
-                {buildWhatsApp(currentDigest, industryName)}
-              </pre>
+              {selected.size > 0 && selected.size < totalStories && (
+                <button
+                  onClick={() => setSelected(new Set(currentDigest.stories?.map(s => storyKey(s)) ?? []))}
+                  style={{ fontSize: 11, fontFamily: "monospace", color: "#aaa", background: "none", border: "none", cursor: "pointer", padding: 0 }}
+                >
+                  Select all
+                </button>
+              )}
+              {selected.size === totalStories && totalStories > 0 && (
+                <button
+                  onClick={() => setSelected(new Set())}
+                  style={{ fontSize: 11, fontFamily: "monospace", color: "#aaa", background: "none", border: "none", cursor: "pointer", padding: 0 }}
+                >
+                  Clear all
+                </button>
+              )}
             </div>
 
-            {/* Action buttons */}
-            <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
-              <button
-                onClick={copyToClipboard}
-                style={{
-                  flex: 1, minWidth: 160, padding: "12px 0", fontSize: 13, fontFamily: "sans-serif",
-                  cursor: "pointer", border: copied ? "1px solid #86efac" : "1px solid #ccc",
-                  borderRadius: 8, background: "#fff", color: copied ? "#15803d" : "#111", fontWeight: 500,
-                }}
-              >
-                {copied ? "Copied ✓" : "Copy for WhatsApp"}
-              </button>
-              <button
-                onClick={copyShareLink}
-                style={{
-                  padding: "12px 16px", fontSize: 13, fontFamily: "sans-serif",
-                  cursor: "pointer", border: "1px solid #ccc", borderRadius: 8,
-                  background: "transparent", color: "#666",
-                }}
-                title="Copy link to this page"
-              >
-                🔗 Share
-              </button>
+            {/* Stories */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {currentDigest.stories?.map((s: Story, i: number) => {
+                const key = storyKey(s);
+                const isSelected = selected.has(key);
+                return (
+                  <div
+                    key={key}
+                    onClick={() => toggleStory(key)}
+                    style={{
+                      padding: "12px 14px", borderRadius: 8, cursor: "pointer",
+                      border: isSelected ? "1.5px solid #111" : "0.5px solid #e5e5e5",
+                      background: isSelected ? "#f9f9f8" : "#fff",
+                      transition: "all 0.1s", position: "relative",
+                    }}
+                  >
+                    {/* Tick / index badge */}
+                    <div style={{
+                      position: "absolute", top: 10, right: 12,
+                      width: 20, height: 20, borderRadius: "50%",
+                      background: isSelected ? "#111" : "#f5f5f4",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                    }}>
+                      {isSelected
+                        ? <span style={{ color: "#fff", fontSize: 10 }}>✓</span>
+                        : <span style={{ color: "#bbb", fontSize: 9, fontFamily: "monospace" }}>{i + 1}</span>
+                      }
+                    </div>
+
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 4 }}>
+                      <span style={{ fontFamily: "monospace", fontSize: 10, color: "#aaa", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                        {s.source}
+                      </span>
+                      <span style={{ fontFamily: "monospace", fontSize: 10, background: "#f5f5f4", color: "#666", padding: "2px 6px", borderRadius: 3 }}>
+                        {s.tag}
+                      </span>
+                    </div>
+
+                    {s.url ? (
+                      <a href={s.url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} style={{ textDecoration: "none" }}>
+                        <h2 style={{ margin: "0 0 5px", fontSize: 16, fontWeight: "normal", color: "#111", lineHeight: 1.3, paddingRight: 28 }}>
+                          {TAG_ICONS[s.tag] || "📌"} {s.headline} ↗
+                        </h2>
+                      </a>
+                    ) : (
+                      <h2 style={{ margin: "0 0 5px", fontSize: 16, fontWeight: "normal", color: "#111", lineHeight: 1.3, paddingRight: 28 }}>
+                        {TAG_ICONS[s.tag] || "📌"} {s.headline}
+                      </h2>
+                    )}
+
+                    <p style={{ margin: 0, fontSize: 12, color: "#777", lineHeight: 1.6, fontFamily: "sans-serif" }}>
+                      {s.summary}
+                    </p>
+
+                    {s.url && (
+                      <p style={{ margin: "6px 0 0", fontSize: 10, fontFamily: "monospace", color: "#bbb", wordBreak: "break-all" }}>
+                        {s.url}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
             </div>
+
+            {/* Sticky WhatsApp preview + copy */}
+            {selectedStories.length > 0 && (
+              <div style={{ position: "sticky", bottom: 0, background: "#fafaf9", paddingTop: 12, paddingBottom: 16, borderTop: "0.5px solid #e5e5e5", marginTop: 8 }}>
+                <div style={{ padding: "12px 16px", background: "#fff", borderRadius: 10, border: "0.5px solid #e5e5e5", marginBottom: 10, maxHeight: 180, overflowY: "auto" }}>
+                  <p style={{ fontFamily: "monospace", fontSize: 10, color: "#aaa", textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 8px" }}>
+                    WhatsApp preview · {selectedStories.length} {selectedStories.length === 1 ? "story" : "stories"}
+                  </p>
+                  <pre style={{ margin: 0, fontSize: 11, color: "#666", fontFamily: "monospace", whiteSpace: "pre-wrap", lineHeight: 1.65 }}>
+                    {buildWhatsApp(currentDigest, industryName, selected)}
+                  </pre>
+                </div>
+                <div style={{ display: "flex", gap: 10 }}>
+                  <button
+                    onClick={copyToClipboard}
+                    style={{
+                      flex: 1, padding: "13px 0", fontSize: 14, fontFamily: "sans-serif",
+                      cursor: "pointer", fontWeight: 500, borderRadius: 8,
+                      border: copied ? "1px solid #86efac" : "1px solid #111",
+                      background: copied ? "#f0fdf4" : "#111",
+                      color: copied ? "#15803d" : "#fff",
+                      transition: "all 0.15s",
+                    }}
+                  >
+                    {copied ? "Copied to clipboard ✓" : "Copy for WhatsApp"}
+                  </button>
+                  <button
+                    onClick={copyShareLink}
+                    style={{
+                      padding: "13px 16px", fontSize: 13, fontFamily: "sans-serif",
+                      cursor: "pointer", border: "1px solid #ccc", borderRadius: 8,
+                      background: "transparent", color: "#666",
+                    }}
+                    title="Copy link to this page"
+                  >
+                    🔗
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Archive */}
             {archive.length > 0 && (
@@ -341,7 +419,7 @@ export default function DigestPage({ params }: { params: { slug: string } }) {
                     {archive.map((d) => (
                       <div
                         key={d.id}
-                        onClick={() => setCurrentDigest(d)}
+                        onClick={() => switchDigest(d)}
                         style={{
                           padding: "10px 14px", background: "#fff", border: "0.5px solid #e5e5e5",
                           borderRadius: 8, cursor: "pointer",

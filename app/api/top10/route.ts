@@ -200,7 +200,7 @@ async function fetchMandatoryStory(
   const userPrompt = `Search for a recent AI news story about ${industry.label}. Focus on ${today} or ${yesterday}. Be efficient — perform one targeted search, then return your result immediately. Do not perform more than 3 searches total.`;
 
   console.log(`[top10] [${industry.label}] Starting search`);
-  const raw = await runSearchLoop(mandatorySystemPrompt(industry, today, yesterday, industryPast), userPrompt, 600, 3);
+  const raw = await runSearchLoop(mandatorySystemPrompt(industry, today, yesterday, industryPast), userPrompt, 800, 3);
   const story = parseSingleStory(raw, `[${industry.label}]`);
 
   if (story?.headline && story?.url) {
@@ -210,7 +210,7 @@ async function fetchMandatoryStory(
 
   // Retry without exclusions
   console.log(`[top10] [${industry.label}] Failed, retrying without exclusions`);
-  const rawFallback = await runSearchLoop(mandatorySystemPrompt(industry, today, yesterday, []), userPrompt, 600, 3);
+  const rawFallback = await runSearchLoop(mandatorySystemPrompt(industry, today, yesterday, []), userPrompt, 800, 3);
   const fallback = parseSingleStory(rawFallback, `[${industry.label}] fallback`);
 
   if (fallback?.headline && fallback?.url) {
@@ -268,13 +268,18 @@ export async function GET() {
   const remainingIndustries = allIndustries.filter(ind => !mandatorySlugs.has(ind.slug));
 
   try {
-    // Step 1: 5 parallel mandatory industry calls
-    console.log("[top10] Starting 5 parallel mandatory calls");
+    // Step 1: staggered mandatory industry calls (200ms apart to avoid rate limits)
+    console.log("[top10] Starting mandatory calls");
     const mandatoryResults = await Promise.all(
-      MANDATORY_INDUSTRIES.map(ind => fetchMandatoryStory(ind, today, yesterday, recentStories))
+      MANDATORY_INDUSTRIES.map((ind, i) =>
+        new Promise<any>(resolve => setTimeout(
+          () => fetchMandatoryStory(ind, today, yesterday, recentStories).then(resolve),
+          i * 200
+        ))
+      )
     );
     const mandatoryReal = mandatoryResults.filter(s => s.url);
-    console.log(`[top10] Mandatory complete: ${mandatoryReal.length}/5 stories found`);
+    console.log(`[top10] Mandatory complete: ${mandatoryReal.length}/${MANDATORY_INDUSTRIES.length} stories found`);
 
     // Step 2: Remaining 5
     console.log("[top10] Starting remaining 5 call");

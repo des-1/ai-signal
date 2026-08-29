@@ -281,8 +281,9 @@ export async function GET() {
     const mandatoryReal = mandatoryResults.filter(s => s.url);
     console.log(`[top10] Mandatory complete: ${mandatoryReal.length}/${MANDATORY_INDUSTRIES.length} stories found`);
 
-    // Step 2: Remaining 5
-    console.log("[top10] Starting remaining 5 call");
+    // Step 2: Remaining stories to reach 10 total
+    const remainingCount = Math.max(10 - mandatoryReal.length, 0);
+    console.log(`[top10] Starting remaining ${remainingCount} call`);
     const coveredTags = mandatoryReal.map((s: any) => s.tag).filter(Boolean).join(", ");
     const mandatoryHeadlines = mandatoryReal.map((s: any) => s.headline).join("\n");
     const top20RecentUrls = recentStories.slice(-20).map(s => s.url).join("\n");
@@ -290,7 +291,7 @@ export async function GET() {
       ? remainingIndustries.map(ind => `- ${ind.name}${ind.focus ? `: ${ind.focus}` : ""}`).join("\n")
       : "- Energy\n- Construction\n- Logistics\n- Education\n- Engineering\n- Manufacturing\n- Retail\n- Technology";
 
-    const remainingSystemPrompt = `You are an AI news researcher. Find 5 important AI news stories from the past 48 hours, each from a DIFFERENT industry from this list:
+    const remainingSystemPrompt = `You are an AI news researcher. Find ${remainingCount} important AI news stories from the past 48 hours, each from a DIFFERENT industry from this list:
 ${industryList}
 
 EXCEPTION — Major AI company announcements: Even if not listed above, always include a story from Anthropic, OpenAI, Google DeepMind, Meta AI, Microsoft, Amazon (AWS), Apple, IBM, Salesforce, or NVIDIA if they made a major announcement in the past 48 hours (new model, product launch, pricing change, significant policy move) with clear business or industry impact. This takes priority over filling a slot from the industry list.
@@ -311,14 +312,14 @@ ${mandatoryHeadlines}
 Previously covered URLs to avoid:
 ${top20RecentUrls}
 
-Return a valid JSON array of exactly 5 stories:
+Return a valid JSON array of exactly ${remainingCount} stories:
 [{"headline":"max 12 words","source":"Publication Name","tag":"industry name","summary":"2-3 sentences for a non-technical reader","url":"article URL"}]`;
 
-    const remainingUserPrompt = `Find 5 AI news stories from 5 different industries. Do not use these already-covered industries: ${coveredTags}. Be efficient — perform one targeted search per industry, then return your results immediately. Do not perform more than 5 searches total.`;
+    const remainingUserPrompt = `Find ${remainingCount} AI news stories from ${remainingCount} different industries. Do not use these already-covered industries: ${coveredTags}. Be efficient — perform one targeted search per industry, then return your results immediately. Do not perform more than ${remainingCount} searches total.`;
     const raw2 = await runSearchLoop(remainingSystemPrompt, remainingUserPrompt, 2000);
-    const remaining = parseStories(raw2, "remaining 5");
+    const remaining = parseStories(raw2, `remaining ${remainingCount}`);
     if (!remaining) {
-      console.warn("[top10] Remaining 5 call failed, saving mandatory stories only");
+      console.warn(`[top10] Remaining ${remainingCount} call failed, saving mandatory stories only`);
     }
 
     // Step 3: Merge and dedup by URL

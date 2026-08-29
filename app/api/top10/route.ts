@@ -164,9 +164,13 @@ async function runSearchLoop(systemPrompt: string, userPrompt: string, maxTokens
 
 // ── Per-industry mandatory fetch ─────────────────────────────────────────────
 
-function mandatorySystemPrompt(industry: typeof MANDATORY_INDUSTRIES[0], today: string, yesterday: string, industryPast: PastStory[]): string {
+function mandatorySystemPrompt(industry: typeof MANDATORY_INDUSTRIES[0], today: string, yesterday: string, industryPast: PastStory[], allUsedUrls: Set<string>): string {
   const exclusionBlock = industryPast.length > 0
     ? `Do NOT cover these previously covered stories:\n${industryPast.map(s => `- ${s.headline} (${s.url})`).join("\n")}\n\n`
+    : "";
+
+  const urlBlock = allUsedUrls.size > 0
+    ? `Do NOT use any of these URLs — they have already been used in recent digests:\n${Array.from(allUsedUrls).join("\n")}\n\n`
     : "";
 
   return `You are an AI news researcher. Find ONE important AI news story from the past 48 hours relevant to ${industry.label}.
@@ -183,7 +187,7 @@ UK/EU topics to actively search for alongside US news: UK AI regulation and gove
 
 Focus: ${industry.scope}
 
-${exclusionBlock}Return only a single valid JSON object, no array, no preamble, no markdown:
+${urlBlock}${exclusionBlock}Return only a single valid JSON object, no array, no preamble, no markdown:
 {"headline":"max 12 words","source":"Publication Name","tag":"${industry.label}","summary":"2-3 sentences for a non-technical reader","url":"article URL"}`;
 }
 
@@ -192,6 +196,7 @@ async function fetchMandatoryStory(
   today: string,
   yesterday: string,
   recentStories: PastStory[],
+  allUsedUrls: Set<string>,
 ): Promise<any> {
   const industryPast = recentStories
     .filter(s => industry.match(s.tag))
@@ -200,7 +205,7 @@ async function fetchMandatoryStory(
   const userPrompt = `Search for a recent AI news story about ${industry.label}. Focus on ${today} or ${yesterday}. Be efficient — perform one targeted search, then return your result immediately. Do not perform more than 3 searches total.`;
 
   console.log(`[top10] [${industry.label}] Starting search`);
-  const raw = await runSearchLoop(mandatorySystemPrompt(industry, today, yesterday, industryPast), userPrompt, 800, 3);
+  const raw = await runSearchLoop(mandatorySystemPrompt(industry, today, yesterday, industryPast, allUsedUrls), userPrompt, 800, 3);
   const story = parseSingleStory(raw, `[${industry.label}]`);
 
   if (story?.headline && story?.url) {
@@ -210,7 +215,7 @@ async function fetchMandatoryStory(
 
   // Retry without exclusions
   console.log(`[top10] [${industry.label}] Failed, retrying without exclusions`);
-  const rawFallback = await runSearchLoop(mandatorySystemPrompt(industry, today, yesterday, []), userPrompt, 800, 3);
+  const rawFallback = await runSearchLoop(mandatorySystemPrompt(industry, today, yesterday, [], allUsedUrls), userPrompt, 800, 3);
   const fallback = parseSingleStory(rawFallback, `[${industry.label}] fallback`);
 
   if (fallback?.headline && fallback?.url) {
@@ -273,7 +278,7 @@ export async function GET() {
     const mandatoryResults = await Promise.all(
       MANDATORY_INDUSTRIES.map((ind, i) =>
         new Promise<any>(resolve => setTimeout(
-          () => fetchMandatoryStory(ind, today, yesterday, recentStories).then(resolve),
+          () => fetchMandatoryStory(ind, today, yesterday, recentStories, allUsedUrls).then(resolve),
           i * 200
         ))
       )
@@ -286,7 +291,7 @@ export async function GET() {
     console.log(`[top10] Starting remaining ${remainingCount} call`);
     const coveredTags = mandatoryReal.map((s: any) => s.tag).filter(Boolean).join(", ");
     const mandatoryHeadlines = mandatoryReal.map((s: any) => s.headline).join("\n");
-    const top20RecentUrls = recentStories.slice(-20).map(s => s.url).join("\n");
+
     const industryList = remainingIndustries.length > 0
       ? remainingIndustries.map(ind => `- ${ind.name}${ind.focus ? `: ${ind.focus}` : ""}`).join("\n")
       : "- Energy\n- Construction\n- Logistics\n- Education\n- Engineering\n- Manufacturing\n- Retail\n- Technology";
@@ -309,8 +314,8 @@ UK/EU topics to actively search for alongside US news: UK AI regulation and gove
 Stories already found (do not duplicate these topics):
 ${mandatoryHeadlines}
 
-Previously covered URLs to avoid:
-${top20RecentUrls}
+URLs already used in the past 7 days — do NOT use any of these:
+${Array.from(allUsedUrls).join("\n")}
 
 Return a valid JSON array of exactly ${remainingCount} stories:
 [{"headline":"max 12 words","source":"Publication Name","tag":"industry name","summary":"2-3 sentences for a non-technical reader","url":"article URL"}]`;

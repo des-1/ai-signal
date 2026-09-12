@@ -24,17 +24,18 @@ function timeAgo(date: string) {
   return `${days}d ago`;
 }
 
+const TOP10_URL = "https://representai.co.uk/category/top-10-ai-news-ai-signal/";
+
 function buildWhatsApp(selected: Top10Story[]): string {
   const date = new Date().toLocaleDateString("en-GB", {
     day: "numeric", month: "long", year: "numeric",
   });
-  let msg = `Daily AI News\n${date}\n\n`;
+  let msg = `RepresentAI Daily AI News\n${date}\n${TOP10_URL}\n\n`;
   selected.forEach((s, i) => {
     msg += `[${s.tag}] *${s.headline}*\n${s.summary}`;
     if (s.url) msg += `\n\n${s.url}`;
     if (i < selected.length - 1) msg += "\n\n";
   });
-  msg += "\n\nDigest via RepresentAI / AI Signal";
   return msg;
 }
 

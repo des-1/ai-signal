@@ -34,17 +34,26 @@ function timeAgo(date: string) {
   return `${days}d ago`;
 }
 
+const DIGEST_URLS: Record<string, string> = {
+  "finance":          "https://representai.co.uk/category/finance-ai-news-ai-signal/",
+  "law":              "https://representai.co.uk/category/legal-ai-news-ai-signal/",
+  "media-marketing":  "https://representai.co.uk/category/media-and-marketing-ai-signal-news/",
+  "defense-security": "https://representai.co.uk/category/defense-and-security-ai-news-ai-signal/",
+};
+const DEFAULT_DIGEST_URL = "https://representai.co.uk/category/top-10-ai-news-ai-signal/";
+
 function storyKey(s: Story) {
   return s.url || s.headline;
 }
 
-function buildWhatsApp(digest: DigestRecord, industryName: string, selected: Set<string>): string {
+function buildWhatsApp(digest: DigestRecord, industryName: string, selected: Set<string>, slug: string): string {
   const date = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
   const allStories = digest.stories ?? [];
   const selectedStories = allStories.filter(s => selected.has(storyKey(s)));
   const allSelected = selectedStories.length === allStories.length;
+  const categoryUrl = DIGEST_URLS[slug] ?? DEFAULT_DIGEST_URL;
 
-  let msg = `Daily AI News - RepresentAI | ${industryName}\n${date}\n\n`;
+  let msg = `RepresentAI Daily AI News | ${industryName}\n${date}\n${categoryUrl}\n\n`;
 
   // Only include the AI-generated overview when all stories are selected —
   // if the user has deselected any, the TL;DR may reference stories not in the message.
@@ -59,7 +68,6 @@ function buildWhatsApp(digest: DigestRecord, industryName: string, selected: Set
     if (s.url) msg += `\n\n${s.url}`;
     if (i < selectedStories.length - 1) msg += "\n\n";
   });
-  msg += "\n\nDigest via RepresentAI / AI Signal";
   return msg;
 }
 
@@ -158,7 +166,7 @@ export default function DigestPage({ params }: { params: { slug: string } }) {
 
   function copyToClipboard() {
     if (!currentDigest) return;
-    navigator.clipboard.writeText(buildWhatsApp(currentDigest, industryName, selected)).then(() => {
+    navigator.clipboard.writeText(buildWhatsApp(currentDigest, industryName, selected, slug)).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
     });
@@ -385,7 +393,7 @@ export default function DigestPage({ params }: { params: { slug: string } }) {
                     WhatsApp preview · {selectedStories.length} {selectedStories.length === 1 ? "story" : "stories"}
                   </p>
                   <pre style={{ margin: 0, fontSize: 11, color: "#666", fontFamily: "monospace", whiteSpace: "pre-wrap", lineHeight: 1.65 }}>
-                    {buildWhatsApp(currentDigest, industryName, selected)}
+                    {buildWhatsApp(currentDigest, industryName, selected, slug)}
                   </pre>
                 </div>
                 <div style={{ display: "flex", gap: 10 }}>

@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { CLAUDE_MODEL, CLAUDE_THINKING } from "@/lib/claude";
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import {
@@ -125,7 +126,8 @@ export async function GET(request: NextRequest) {
     ];
 
     let response = await client.messages.create({
-      model: "claude-sonnet-4-6",
+      model: CLAUDE_MODEL,
+      thinking: CLAUDE_THINKING,
       max_tokens: 2000,
       system: systemPrompt,
       tools: [WEB_SEARCH_TOOL],
@@ -152,7 +154,8 @@ export async function GET(request: NextRequest) {
       messages.push({ role: "user", content: toolResults });
 
       response = await client.messages.create({
-        model: "claude-sonnet-4-6",
+        model: CLAUDE_MODEL,
+        thinking: CLAUDE_THINKING,
         max_tokens: 2000,
         system: systemPrompt,
         tools: [WEB_SEARCH_TOOL],

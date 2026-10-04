@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { CLAUDE_MODEL, CLAUDE_THINKING } from "@/lib/claude";
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 
@@ -43,7 +44,8 @@ export async function GET() {
 
   try {
     const response = await client.messages.create({
-      model: "claude-sonnet-4-6",
+      model: CLAUDE_MODEL,
+      thinking: CLAUDE_THINKING,
       max_tokens: 150,
       messages: [
         {

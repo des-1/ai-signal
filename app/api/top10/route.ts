@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { CLAUDE_MODEL, CLAUDE_THINKING } from "@/lib/claude";
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { publishToWordPress, formatTop10AsHtml, todayLabel, TOP10_WP_CATEGORY } from "@/lib/wordpress";
@@ -122,7 +123,8 @@ async function runSearchLoop(systemPrompt: string, userPrompt: string, maxTokens
   const messages: Anthropic.MessageParam[] = [{ role: "user", content: userPrompt }];
 
   let response = await client.messages.create({
-    model: "claude-sonnet-4-6",
+    model: CLAUDE_MODEL,
+    thinking: CLAUDE_THINKING,
     max_tokens: maxTokens,
     system: systemPrompt,
     tools: [WEB_SEARCH_TOOL],
@@ -148,7 +150,8 @@ async function runSearchLoop(systemPrompt: string, userPrompt: string, maxTokens
     messages.push({ role: "user", content: toolResults });
 
     response = await client.messages.create({
-      model: "claude-sonnet-4-6",
+      model: CLAUDE_MODEL,
+      thinking: CLAUDE_THINKING,
       max_tokens: maxTokens,
       system: systemPrompt,
       tools: [WEB_SEARCH_TOOL],
